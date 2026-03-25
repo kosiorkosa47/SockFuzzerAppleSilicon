@@ -633,6 +633,7 @@ if(APPLE)
     COMMENT "Creating relocatable XNU object with localized symbols"
   )
   add_custom_target(xnu_obj DEPENDS libxnu_relocatable.o)
+  add_dependencies(xnu_obj bsd osfmk)
 else()
   find_program(LLD ld.lld REQUIRED)
   find_program(OBJCOPY objcopy REQUIRED)
@@ -774,8 +775,10 @@ if(NOT DEFINED ENV{SANITIZER})
     add_dependencies(fake_impls_test xnu_obj)
   else()
     target_link_libraries(fake_impls_test
-      libxnu_relocatable.o protobuf-mutator ${Protobuf_LIBRARIES} libbsd pthread
+      ${CMAKE_CURRENT_BINARY_DIR}/libxnu_relocatable.o
+      protobuf-mutator ${Protobuf_LIBRARIES} libbsd pthread
     )
+    add_dependencies(fake_impls_test xnu_obj)
   endif()
   add_test(NAME fake_impls_test COMMAND fake_impls_test)
 endif()
