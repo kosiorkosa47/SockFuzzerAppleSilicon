@@ -588,6 +588,7 @@ void necp_client_copy_parameters(int fd, NecpClientId client_id,
                                  uint32_t copyout_size) {
   std::string client_id_s = GetNecpClient(client_id);
   copyout_size %= 4096;
+  if (copyout_size == 0) copyout_size = 16;  // avoid zero-size allocation
   std::unique_ptr<uint8_t[]> copyout_buffer(new uint8_t[copyout_size]);
   int retval = 0;
   necp_client_action_wrapper(fd, NECP_CLIENT_ACTION_COPY_PARAMETERS,
@@ -1349,6 +1350,7 @@ DEFINE_BINARY_PROTO_FUZZER(const Session &session) {
       case Command::kNecpSessionAction: {
         size_t out_buffer_size =
             command.necp_session_action().out_buffer_size() % 4096;
+        if (out_buffer_size == 0) out_buffer_size = 16;
         std::unique_ptr<uint8_t[]> out_buffer(new uint8_t[out_buffer_size]);
         necp_session_action_wrapper(
             command.necp_session_action().necp_fd(),
@@ -1560,7 +1562,18 @@ DEFINE_BINARY_PROTO_FUZZER(const Session &session) {
         }
         // Apply optional socket option in this state.
         if (command.tcp_session().has_extra_sockopt()) {
-          HandleSetSockOpt(command);
+          const SetSocketOpt &sopt = command.tcp_session().extra_sockopt();
+          int level = sopt.level();
+          int name = sopt.name();
+          std::string val_data;
+          if (sopt.has_val() && sopt.val().has_raw()) {
+            val_data = sopt.val().raw();
+          } else if (sopt.has_val() && sopt.val().has_int_val()) {
+            int32_t v = sopt.val().int_val().value();
+            val_data = std::string((char *)&v, (char *)&v + sizeof(v));
+          }
+          setsockopt_wrapper(fd, level, name, (caddr_t)val_data.data(),
+                             val_data.size(), nullptr);
         }
         break;
       }

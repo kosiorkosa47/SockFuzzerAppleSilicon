@@ -52,5 +52,8 @@ _fake_time_reset
 _fake_uuid_reset
 _fake_thread
 _sendmsg_wrapper
+_sendto_nocancel_wrapper
+_recvmsg_nocancel_wrapper
+_sendmsg_nocancel_wrapper
 _necp_match_policy_wrapper
 _kmem_mb_reset_pages
