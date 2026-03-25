@@ -84,12 +84,14 @@ message SockAddr {
     SockAddr6 sockaddr6 = 3;
     // UNIX domain socket
     SockAddrUn sockaddr_un = 4;
-
-    // TODO(upstream): sockaddr_ctl, sockaddr_*
-
-    // Fuzz raw parsing of sockaddrs
-    // bytes raw_bytes = 1000;
+    // Kernel control socket (AF_SYSTEM + SYSPROTO_CONTROL)
+    SockAddrCtl sockaddr_ctl = 5;
   }
+}
+
+message SockAddrCtl {
+  required uint32 sc_id = 1;    // control identifier
+  required uint32 sc_unit = 2;  // developer-defined unit number
 }
 
 message SockAddrUn {
@@ -836,6 +838,11 @@ enum TcpSeq {
   SEQ_MAX = -1;                 // 0xFFFFFFFF -- max uint32
 }
 
+message TcpOption {
+  required uint32 kind = 1;  // TCPOPT_*
+  optional bytes data = 2;   // option payload (without kind/len bytes)
+}
+
 message TcpHdr {
   required Port th_sport = 1;
   required Port th_dport = 2;
@@ -849,6 +856,8 @@ message TcpHdr {
   // Ned's extensions
   required bool is_pure_syn = 10;
   required bool is_pure_ack = 11;
+  // TCP wire-format options (B1): SACK, timestamps, MSS, window scale
+  repeated TcpOption options = 12;
 }
 
 enum TcpFlag {
@@ -879,6 +888,8 @@ message IpHdr {
   required Protocol ip_p = 8;
   required InAddr ip_src = 9;
   required InAddr ip_dst = 10;
+  // IP options (B10): LSRR, SSRR, record route, timestamp
+  optional bytes ip_options = 11;
 }
 
 message Ip6Hdr {

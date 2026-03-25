@@ -237,6 +237,25 @@ std::string get_sockaddr(const SockAddr &sockaddr) {
       dat = std::string((char *)&sun, (char *)&sun + sizeof(sun));
       break;
     }
+    case SockAddr::kSockaddrCtl: {
+      // struct sockaddr_ctl: sa_len, sa_family(AF_SYSTEM), ss_sysaddr(2=SYSPROTO_CONTROL),
+      // sc_id, sc_unit, sc_reserved[5]
+      struct {
+        uint8_t sc_len;
+        uint8_t sc_family;
+        uint16_t ss_sysaddr;
+        uint32_t sc_id;
+        uint32_t sc_unit;
+        uint32_t sc_reserved[5];
+      } sctl = {};
+      sctl.sc_len = sizeof(sctl);
+      sctl.sc_family = 32;  // AF_SYSTEM
+      sctl.ss_sysaddr = 2;  // SYSPROTO_CONTROL
+      sctl.sc_id = sockaddr.sockaddr_ctl().sc_id();
+      sctl.sc_unit = sockaddr.sockaddr_ctl().sc_unit();
+      dat = std::string((char *)&sctl, (char *)&sctl + sizeof(sctl));
+      break;
+    }
     case SockAddr::SOCKADDR_NOT_SET: {
       break;
     }
@@ -261,13 +280,22 @@ std::string get_ip6_hdr(const Ip6Hdr &hdr, uint16_t expected_size) {
 }
 
 std::string get_ip_hdr(const IpHdr &hdr, size_t expected_size) {
+  // Build IP options (B10) — pad to 4-byte boundary.
+  std::string options;
+  if (hdr.has_ip_options() && !hdr.ip_options().empty()) {
+    options = hdr.ip_options();
+    if (options.size() > 40) options.resize(40);  // MAX_IPOPTLEN
+    while (options.size() % 4 != 0) options.push_back('\0');  // pad
+  }
+
   struct in_addr ip_src = {.s_addr = (unsigned int)hdr.ip_src()};
   struct in_addr ip_dst = {.s_addr = (unsigned int)hdr.ip_dst()};
+  uint8_t ihl = 5 + (options.size() / 4);
   struct ip ip_hdr = {
-      .ip_hl = 5,    // TODO(upstream): support options // hdr.ip_hl(),
-      .ip_v = IPV4,  // hdr.ip_v(),
+      .ip_hl = ihl,
+      .ip_v = IPV4,
       .ip_tos = (u_char)hdr.ip_tos(),
-      .ip_len = (u_short)__builtin_bswap16(expected_size),
+      .ip_len = (u_short)__builtin_bswap16(expected_size + options.size()),
       .ip_id = (u_short)hdr.ip_id(),
       .ip_off = (u_short)hdr.ip_off(),
       .ip_ttl = (u_char)hdr.ip_ttl(),
@@ -277,6 +305,7 @@ std::string get_ip_hdr(const IpHdr &hdr, size_t expected_size) {
       .ip_dst = ip_dst,
   };
   std::string dat((char *)&ip_hdr, (char *)&ip_hdr + sizeof(ip_hdr));
+  dat += options;
   return dat;
 }
 
@@ -318,7 +347,25 @@ std::string get_tcp_hdr(const TcpHdr &hdr) {
     tcphdr.th_flags |= TH_ACK;
   }
 
+  // Serialize TCP options (B1): kind + len + data for each option.
+  std::string tcp_opts;
+  for (const auto &opt : hdr.options()) {
+    uint8_t kind = (uint8_t)opt.kind();
+    tcp_opts.push_back(kind);
+    if (kind == 0 || kind == 1) continue;  // EOL / NOP — no length byte
+    uint8_t len = 2 + opt.data().size();
+    tcp_opts.push_back(len);
+    tcp_opts += opt.data();
+  }
+  // Pad to 4-byte boundary.
+  while (tcp_opts.size() % 4 != 0) tcp_opts.push_back('\0');
+  if (tcp_opts.size() > 40) tcp_opts.resize(40);  // MAX_TCPOPTLEN
+
+  // Set th_off to account for options.
+  tcphdr.th_off = (sizeof(tcphdr) + tcp_opts.size()) / 4;
+
   std::string dat((char *)&tcphdr, (char *)&tcphdr + sizeof(tcphdr));
+  dat += tcp_opts;
   return dat;
 }
 
