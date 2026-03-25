@@ -1223,11 +1223,21 @@ void HandleSendmsg(const Command &command, int &retval) {
 // ---------------------------------------------------------------------------
 // Main fuzzer entry point
 // ---------------------------------------------------------------------------
+
+// C1: Fork server integration.
+// Set SOCKFUZZER_FORK_MODE=1 to run each iteration in an isolated child
+// process. This provides perfect state isolation at the cost of ~2x overhead.
+// Useful for crash reproduction and validation campaigns.
+#include "fuzz/snapshot/fork_server.h"
+static bool fork_server_initialized = false;
+
 DEFINE_BINARY_PROTO_FUZZER(const Session &session) {
   if (!ready) {
     initialize_network();
     init_proc();
     ready = true;
+    fork_server_init();
+    fork_server_initialized = true;
   }
 
   FuzzedDataProvider dp((const uint8_t *)session.data_provider().data(),
