@@ -135,12 +135,66 @@ __attribute__((visibility("default"))) void clear_all() {
 
 #define MT_DATA 1
 
+// Create a chained mbuf from data split at the given offsets.
+// This enables fuzzing of m_pullup, m_pulldown, m_copydata at mbuf boundaries.
+__attribute__((visibility("default"))) struct mbuf* get_mbuf_data_chained(
+    const char* data, size_t size, int pktflags,
+    const uint32_t* split_points, int num_splits) {
+  if (num_splits <= 0 || !split_points) {
+    // Fall through to single mbuf.
+    struct mbuf* m = mbuf_create((const uint8_t*)data, size, true, false,
+                                 MT_DATA, pktflags);
+    if (m) mbuf_pkthdr_setrcvif((mbuf_t)m, lo_ifp);
+    return m;
+  }
+
+  // First segment: header mbuf.
+  size_t first_len = split_points[0] % (size + 1);
+  if (first_len > size) first_len = size;
+  struct mbuf* head = mbuf_create((const uint8_t*)data, first_len, true, false,
+                                   MT_DATA, pktflags);
+  if (!head) return NULL;
+  // Set total packet length on header.
+  head->m_pkthdr.len = size;
+  mbuf_pkthdr_setrcvif((mbuf_t)head, lo_ifp);
+
+  struct mbuf* prev = head;
+  size_t offset = first_len;
+
+  for (int i = 1; i <= num_splits && offset < size; i++) {
+    size_t seg_len;
+    if (i < num_splits) {
+      seg_len = split_points[i] % (size - offset + 1);
+      if (seg_len == 0) seg_len = 1;
+    } else {
+      seg_len = size - offset;  // last segment gets remainder
+    }
+    if (offset + seg_len > size) seg_len = size - offset;
+
+    struct mbuf* seg = mbuf_create((const uint8_t*)(data + offset), seg_len,
+                                    false, false, MT_DATA, 0);
+    if (!seg) break;
+    prev->m_hdr.mh_next = seg;
+    prev = seg;
+    offset += seg_len;
+  }
+
+  // Any remaining data goes in the last segment.
+  if (offset < size && prev != head) {
+    size_t remain = size - offset;
+    struct mbuf* tail = mbuf_create((const uint8_t*)(data + offset), remain,
+                                     false, false, MT_DATA, 0);
+    if (tail) prev->m_hdr.mh_next = tail;
+  }
+
+  return head;
+}
+
 __attribute__((visibility("default"))) struct mbuf* get_mbuf_data(
     const char* data, size_t size, int pktflags) {
   struct mbuf* mbuf_data =
       mbuf_create((const uint8_t*)data, size, true, false, MT_DATA, pktflags);
 
-  // TODO(upstream): consider using a non-loopback interface
   // This indicates where the packet came from.
   mbuf_pkthdr_setrcvif((mbuf_t)mbuf_data, lo_ifp);
   return mbuf_data;

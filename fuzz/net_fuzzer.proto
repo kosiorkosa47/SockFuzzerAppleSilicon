@@ -704,6 +704,12 @@ message Icmp6Packet {
   required bytes data = 3;
 }
 
+// Mbuf chain layout — split packet across multiple mbufs at these offsets (B2).
+// Enables fuzzing of m_pullup, m_pulldown, m_copydata at segment boundaries.
+message MbufLayout {
+  repeated uint32 split_points = 1;
+}
+
 message Packet {
   oneof packet {
     TcpPacket tcp_packet = 1;
@@ -717,6 +723,8 @@ message Packet {
     bytes raw_ip4 = 1000;
     bytes raw_ip6 = 1001;
   }
+  // Optional: split packet across mbuf chain for boundary bug detection
+  optional MbufLayout mbuf_layout = 1002;
 }
 
 message TcpPacket {

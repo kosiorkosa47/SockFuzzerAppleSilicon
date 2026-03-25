@@ -46,6 +46,7 @@ _diocstop_val
 _siocsetroutermode_val
 _siocsifvlan_val
 _real_copyout
+_get_mbuf_data_chained
 _fake_time_reset
 _fake_uuid_reset
 _fake_thread

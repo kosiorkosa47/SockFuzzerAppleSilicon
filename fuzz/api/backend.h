@@ -32,6 +32,8 @@
 bool init_proc(void);
 void clear_all();
 void* get_mbuf_data(const char* data, size_t size, int pktflags);
+void* get_mbuf_data_chained(const char* data, size_t size, int pktflags,
+                             const uint32_t* split_points, int num_splits);
 void ip_input_wrapper(void* m);
 void ip6_input_wrapper(void* m);
 
