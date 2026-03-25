@@ -105,6 +105,9 @@ int uuid_compare(const uuid_t uu1, const uuid_t uu2) {
 
 static uint32_t g_uuid_counter = 0;
 
+__attribute__((visibility("default")))
+void fake_uuid_reset(void) { g_uuid_counter = 0; }
+
 void uuid_generate_random(uuid_t out) {
   memset(out, 0, sizeof(uuid_t));
   g_uuid_counter++;
@@ -139,6 +142,9 @@ void* vfs_context_proc() { return kernproc; }
 // Reset to 0 is implicit: the counter persists across iterations which
 // mimics monotonic system time.
 static uint64_t g_fake_time_counter = 1000000;  // start at 1ms in nanoseconds
+
+__attribute__((visibility("default")))
+void fake_time_reset(void) { g_fake_time_counter = 1000000; }
 
 uint64_t mach_continuous_time(void) {
   g_fake_time_counter += 100000;  // advance 100us per call

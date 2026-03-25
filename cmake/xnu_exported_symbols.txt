@@ -46,6 +46,9 @@ _diocstop_val
 _siocsetroutermode_val
 _siocsifvlan_val
 _real_copyout
+_fake_time_reset
+_fake_uuid_reset
+_fake_thread
 _sendmsg_wrapper
 _necp_match_policy_wrapper
 _kmem_mb_reset_pages

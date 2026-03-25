@@ -1,0 +1,79 @@
+# SockFuzzer dictionary — network protocol constants for libFuzzer
+# Usage: ./net_fuzzer corpus/ -dict=net_fuzzer.dict
+
+# IP protocol numbers
+"\x06"          # TCP
+"\x11"          # UDP
+"\x01"          # ICMP
+"\x3a"          # ICMPv6
+"\x29"          # IPv6-in-IPv4
+"\x2f"          # GRE
+"\x32"          # ESP
+"\x33"          # AH
+"\x2b"          # IPv6 routing header
+"\x2c"          # IPv6 fragment header
+"\x00"          # IPv6 hop-by-hop
+"\x3b"          # IPv6 no next header
+
+# Common ports (network byte order, big-endian)
+"\x00\x16"      # 22 SSH
+"\x00\x35"      # 53 DNS
+"\x00\x50"      # 80 HTTP
+"\x01\xbb"      # 443 HTTPS
+"\x00\x00"      # 0
+"\x00\x01"      # 1
+"\x15\xb3"      # 5555
+"\xc0\x00"      # 49152
+
+# IPv6 prefixes
+"\xfe\x80"      # link-local
+"\xff\x02"      # multicast link-local
+"\xff\x01"      # multicast node-local
+"\xfc\x00"      # unique local
+"\x20\x02"      # 6to4
+"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xff\xff"  # v4-mapped prefix
+
+# IPv4 addresses (network byte order)
+"\x7f\x00\x00\x01"  # 127.0.0.1
+"\x00\x00\x00\x00"  # 0.0.0.0
+"\xff\xff\xff\xff"  # broadcast
+"\xc0\xa8\x01\x01"  # 192.168.1.1
+"\xe0\x00\x00\x01"  # 224.0.0.1 multicast
+
+# TCP flags
+"\x02"          # SYN
+"\x12"          # SYN+ACK
+"\x10"          # ACK
+"\x01"          # FIN
+"\x04"          # RST
+"\x18"          # PSH+ACK
+"\x11"          # FIN+ACK
+
+# Socket domains
+"\x02"          # AF_INET
+"\x1e"          # AF_INET6
+"\x01"          # AF_UNIX
+"\x11"          # AF_ROUTE
+"\x27"          # AF_MULTIPATH
+
+# Socket types
+"\x01"          # SOCK_STREAM
+"\x02"          # SOCK_DGRAM
+"\x03"          # SOCK_RAW
+
+# IP version headers
+"\x45"          # IPv4, IHL=5
+"\x60"          # IPv6 version
+
+# ioctl magic bytes
+"SIOC"
+"DIOC"
+
+# NECP action codes
+"\x01"          # NECP_CLIENT_ACTION_ADD
+"\x02"          # NECP_CLIENT_ACTION_REMOVE
+"\x07"          # NECP_CLIENT_ACTION_AGENT
+
+# Common sizes
+"\x00\x00\x05\xdc"  # 1500 (MTU)
+"\x00\x00\xff\xff"  # 65535

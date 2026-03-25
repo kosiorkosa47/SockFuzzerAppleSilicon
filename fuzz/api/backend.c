@@ -101,8 +101,12 @@ __attribute__((visibility("default"))) bool init_proc(void) {
 }
 
 extern void kmem_mb_reset_pages(void);
+extern void fake_time_reset(void);
+extern void fake_uuid_reset(void);
+extern char fake_thread[];
 
 __attribute__((visibility("default"))) void clear_all() {
+  // Run kernel timers to drain pending work.
   inpcb_timeout(NULL, NULL);
   key_timehandler();
   frag_timeout();
@@ -115,16 +119,18 @@ __attribute__((visibility("default"))) void clear_all() {
   frag6_timeout();
   mld_timeout();
 
-  // this adds work to the work queue
+  // Route timer cleanup.
   in6_rtqtimo(NULL);
   in_rtqtimo(NULL);
 
-  // TODO(upstream): nd6_dad_timer
   nstat_idle_check(NULL, NULL);
   domain_timeout(NULL);
 
-  // Reset mbuf page allocator so long fuzzing runs don't exhaust the pool.
+  // Reset subsystem state for next iteration.
   kmem_mb_reset_pages();
+  fake_time_reset();
+  fake_uuid_reset();
+  memset(fake_thread, 0, 4096);
 }
 
 #define MT_DATA 1
