@@ -1509,6 +1509,56 @@ DEFINE_BINARY_PROTO_FUZZER(const Session &session) {
         }
         break;
       }
+      case Command::kTcpSession: {
+        // F1: TCP state machine aware sequences.
+        // Create a TCP socket, walk it to the requested state, then
+        // optionally inject a packet or set a socket option in that state.
+        int domain = command.tcp_session().has_domain()
+                         ? command.tcp_session().domain() : 2;  // AF_INET
+        int fd = 0;
+        if (socket_wrapper(domain, 1 /*SOCK_STREAM*/, 6 /*IPPROTO_TCP*/, &fd))
+          break;
+        open_fds.insert(fd);
+
+        // Bind to a port.
+        struct sockaddr_in sin = {};
+        sin.sin_len = sizeof(sin);
+        sin.sin_family = 2;  // AF_INET
+        sin.sin_port = (unsigned short)command.tcp_session().port();
+        sin.sin_addr.s_addr = 0;  // INADDR_ANY
+        bind_wrapper(fd, (caddr_t)&sin, sizeof(sin), nullptr);
+
+        int st = command.tcp_session().session_type();
+        if (st >= TCP_LISTEN) {
+          listen_wrapper(fd, 5, nullptr);
+        }
+        if (st >= TCP_SYN_RCVD && command.tcp_session().has_extra_packet()) {
+          DoIpInput(command.tcp_session().extra_packet());
+        }
+        if (st >= TCP_ESTABLISHED) {
+          // Inject a SYN+ACK to complete handshake (best effort).
+          if (command.tcp_session().has_extra_packet()) {
+            DoIpInput(command.tcp_session().extra_packet());
+          }
+        }
+        if (st == TCP_CLOSE_WAIT || st == TCP_FIN_WAIT_1 ||
+            st == TCP_FIN_WAIT_2 || st == TCP_TIME_WAIT ||
+            st == TCP_CLOSING || st == TCP_LAST_ACK) {
+          // Inject FIN or close to advance state.
+          if (command.tcp_session().has_extra_packet()) {
+            DoIpInput(command.tcp_session().extra_packet());
+          }
+          if (st == TCP_FIN_WAIT_1 || st == TCP_LAST_ACK) {
+            close_wrapper(fd, nullptr);
+            open_fds.erase(fd);
+          }
+        }
+        // Apply optional socket option in this state.
+        if (command.tcp_session().has_extra_sockopt()) {
+          HandleSetSockOpt(command);
+        }
+        break;
+      }
       case Command::COMMAND_NOT_SET:
         break;
     }

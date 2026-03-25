@@ -263,11 +263,44 @@ message Command {
     MptcpSetsockopt mptcp_setsockopt = 43;
     SendtoNocancel sendto_nocancel = 44;
     Kqueue kqueue = 45;
+    TcpSession tcp_session = 46;
   }
 }
 
 // --- kqueue (B4) ---
 message Kqueue {}
+
+// --- TCP state machine aware grammar (F1) ---
+// Pre-built sequences that walk through specific TCP states.
+// Much more likely to reach deep states than random command sequences.
+message TcpSession {
+  required TcpSessionType session_type = 1;
+  optional Domain domain = 2;           // AF_INET or AF_INET6
+  optional Port port = 3;
+  optional Packet extra_packet = 4;     // inject after state setup
+  optional SetSocketOpt extra_sockopt = 5;
+}
+
+enum TcpSessionType {
+  // socket → bind → listen (reaches LISTEN state)
+  TCP_LISTEN = 0;
+  // socket → bind → listen → inject SYN (reaches SYN_RCVD)
+  TCP_SYN_RCVD = 1;
+  // socket → bind → listen → inject SYN+ACK (reaches ESTABLISHED)
+  TCP_ESTABLISHED = 2;
+  // ESTABLISHED → inject FIN (reaches CLOSE_WAIT)
+  TCP_CLOSE_WAIT = 3;
+  // ESTABLISHED → close (reaches FIN_WAIT_1)
+  TCP_FIN_WAIT_1 = 4;
+  // FIN_WAIT_1 → inject ACK (reaches FIN_WAIT_2)
+  TCP_FIN_WAIT_2 = 5;
+  // FIN_WAIT_2 → inject FIN (reaches TIME_WAIT)
+  TCP_TIME_WAIT = 6;
+  // Simultaneous close — FIN_WAIT_1 → inject FIN (reaches CLOSING)
+  TCP_CLOSING = 7;
+  // CLOSE_WAIT → close (reaches LAST_ACK)
+  TCP_LAST_ACK = 8;
+}
 
 // --- MPTCP (#47) ---
 
