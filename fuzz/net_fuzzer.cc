@@ -498,6 +498,9 @@ void get_ifr_name(void *dest, const IfrName name) {
     case BRIDGE0:
       memcpy(dest, "bridge0", sizeof("bridge0"));
       break;
+    case FAKE0:
+      memcpy(dest, "fake0", sizeof("fake0"));
+      break;
   }
 }
 
@@ -1371,6 +1374,12 @@ DEFINE_BINARY_PROTO_FUZZER(const Session &session) {
       case Command::kSendmsg:
         HandleSendmsg(command, retval);
         break;
+      case Command::kPfControl: {
+        unsigned long cmd = (command.pf_control().action() == PF_START)
+                                ? diocstart_val : diocstop_val;
+        ioctl_wrapper(command.pf_control().fd(), cmd, nullptr, nullptr);
+        break;
+      }
       case Command::COMMAND_NOT_SET:
         break;
     }

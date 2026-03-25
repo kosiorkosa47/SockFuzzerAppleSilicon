@@ -256,6 +256,7 @@ message Command {
     Socketpair socketpair = 38;
     Pipe pipe = 39;
     Shutdown shutdown = 40;
+    PfControl pf_control = 41;
   }
 }
 
@@ -295,6 +296,16 @@ enum ShutdownHow {
   SHUT_RD = 0;
   SHUT_WR = 1;
   SHUT_RDWR = 2;
+}
+
+message PfControl {
+  required PfAction action = 1;
+  optional FileDescriptor fd = 2;
+}
+
+enum PfAction {
+  PF_START = 0;
+  PF_STOP = 1;
 }
 
 message Recvfrom {
@@ -573,6 +584,7 @@ enum IfrName {
   STF0 = 1;
   EN0 = 2;
   BRIDGE0 = 3;
+  FAKE0 = 4;
 }
 
 enum IfruFlag {
