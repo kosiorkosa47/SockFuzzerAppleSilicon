@@ -1234,7 +1234,11 @@ void HandleSendmsg(const Command &command, int &retval) {
 // Set SOCKFUZZER_FORK_MODE=1 to run each iteration in an isolated child
 // process. This provides perfect state isolation at the cost of ~2x overhead.
 // Useful for crash reproduction and validation campaigns.
-#include "fuzz/snapshot/fork_server.h"
+// Fork server — opt-in via SOCKFUZZER_FORK_MODE=1 env var.
+extern "C" {
+bool fork_server_init(void);
+bool fork_server_active(void);
+}
 static bool fork_server_initialized = false;
 
 DEFINE_BINARY_PROTO_FUZZER(const Session &session) {

@@ -814,7 +814,8 @@ if(NOT DEFINED ENV{SANITIZER} AND APPLE)
   add_custom_command(
     OUTPUT libxnu_cov_relocatable.o
     COMMAND ld -r -arch ${CMAKE_SYSTEM_PROCESSOR} $<TARGET_OBJECTS:bsd_cov> $<TARGET_OBJECTS:osfmk_cov> -o libxnu_cov_relocatable_raw.o
-    COMMAND nmedit -s ${CMAKE_CURRENT_BINARY_DIR}/xnu_cov_exported_symbols.txt -p libxnu_cov_relocatable_raw.o -o libxnu_cov_relocatable.o
+    COMMAND sh -c "nm -g libxnu_cov_relocatable_raw.o | awk '{print $$3}' | grep -F -f ${CMAKE_CURRENT_BINARY_DIR}/xnu_cov_exported_symbols.txt > xnu_cov_syms_filtered.txt || true"
+    COMMAND sh -c "if [ -s xnu_cov_syms_filtered.txt ]; then nmedit -s xnu_cov_syms_filtered.txt -p libxnu_cov_relocatable_raw.o -o libxnu_cov_relocatable.o; else cp libxnu_cov_relocatable_raw.o libxnu_cov_relocatable.o; fi"
     DEPENDS $<TARGET_OBJECTS:bsd_cov> $<TARGET_OBJECTS:osfmk_cov>
     COMMAND_EXPAND_LISTS VERBATIM
     COMMENT "Creating coverage-instrumented XNU object"
