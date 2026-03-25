@@ -1,25 +1,24 @@
 # How to Contribute
 
-We'd love to accept your patches and contributions to this project. There are
-just a few small guidelines you need to follow.
+We welcome patches and contributions to this fork.
 
-## Contributor License Agreement
+## About this fork
 
-Contributions to this project must be accompanied by a Contributor License
-Agreement (CLA). You (or your employer) retain the copyright to your
-contribution; this simply gives us permission to use and redistribute your
-contributions as part of the project. Head over to
-<https://cla.developers.google.com/> to see your current agreements on file or
-to sign a new one.
+This is a community fork of
+[googleprojectzero/SockFuzzer](https://github.com/googleprojectzero/SockFuzzer).
+The upstream project's Contributor License Agreement (CLA) requirements apply
+only to contributions made directly to the Google repository, not to this fork.
 
-You generally only need to submit a CLA once, so if you've already submitted one
-(even if it was for a different project), you probably don't need to do it
-again.
+## Submitting changes
+
+1. Fork this repository and create a feature branch.
+2. Make your changes with clear, descriptive commit messages.
+3. Ensure the project builds on at least one supported platform (macOS or Linux).
+4. Open a pull request with a description of what your change does and why.
 
 ## Code reviews
 
-All submissions, including submissions by project members, require review. We
-use GitHub pull requests for this purpose. Consult
+All submissions require review via GitHub pull requests. Consult
 [GitHub Help](https://help.github.com/articles/about-pull-requests/) for more
 information on using pull requests.
 

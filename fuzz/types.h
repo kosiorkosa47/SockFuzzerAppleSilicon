@@ -50,7 +50,6 @@ struct sockaddr {
 };
 
 typedef uint32_t in_addr_t;
-typedef uint8_t sa_family_t;
 typedef uint16_t in_port_t;
 
 struct in_addr {
@@ -88,9 +87,13 @@ struct sockaddr_in6 {
 #define s6_addr32 __u6_addr.__u6_addr32
 
 #ifndef __APPLE__
-__uint32_t ntohl(__uint32_t _data) { return __builtin_bswap32(_data); }
+static inline __uint32_t ntohl(__uint32_t _data) {
+  return __builtin_bswap32(_data);
+}
 
-__uint16_t ntohs(__uint16_t _data) { return __builtin_bswap16(_data); }
+static inline __uint16_t ntohs(__uint16_t _data) {
+  return __builtin_bswap16(_data);
+}
 #endif  // __APPLE__
 
 /*
@@ -311,5 +314,41 @@ struct ip6_ext {
   u_int8_t ip6e_nxt;
   u_int8_t ip6e_len;
 } __attribute__((__packed__));
+
+// UDP header — mirrors XNU's netinet/udp.h
+struct udphdr {
+  u_int16_t uh_sport;  // source port
+  u_int16_t uh_dport;  // destination port
+  u_int16_t uh_ulen;   // udp length
+  u_int16_t uh_sum;    // udp checksum
+};
+
+// UNIX domain socket address — mirrors sys/un.h
+#define SUN_PATH_LEN 104
+struct sockaddr_un {
+  uint8_t sun_len;
+  uint8_t sun_family;
+  char sun_path[SUN_PATH_LEN];
+};
+
+// Socket option structures — mirrors sys/socket.h
+struct linger {
+  int l_onoff;
+  int l_linger;
+};
+
+// Multicast group request — mirrors netinet/in.h
+struct ip_mreq {
+  struct in_addr imr_multiaddr;
+  struct in_addr imr_interface;
+};
+
+// ICMP header — mirrors netinet/ip_icmp.h (simplified)
+struct icmp_hdr {
+  uint8_t icmp_type;
+  uint8_t icmp_code;
+  uint16_t icmp_cksum;
+  uint32_t icmp_data;  // type-specific (id+seq, gateway addr, etc.)
+};
 
 #endif /* FUZZ_TYPES_H_ */

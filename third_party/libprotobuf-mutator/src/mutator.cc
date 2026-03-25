@@ -87,10 +87,13 @@ bool GetRandomBool(RandomEngine* random, size_t n = 2) {
 }
 
 bool IsProto3SimpleField(const FieldDescriptor& field) {
-  assert(field.file()->syntax() == FileDescriptor::SYNTAX_PROTO3 ||
-         field.file()->syntax() == FileDescriptor::SYNTAX_PROTO2);
-  return field.file()->syntax() == FileDescriptor::SYNTAX_PROTO3 &&
-         field.cpp_type() != FieldDescriptor::CPPTYPE_MESSAGE &&
+  // In protobuf v4+ (v34+), FileDescriptor::syntax() and SYNTAX_PROTO3
+  // were removed.  Detect proto3 via has_presence(): in proto3, scalar
+  // singular fields do NOT have presence unless marked 'optional'.
+  bool is_proto3_like = !field.is_repeated() &&
+                        field.cpp_type() != FieldDescriptor::CPPTYPE_MESSAGE &&
+                        !field.has_presence();
+  return is_proto3_like &&
          !field.containing_oneof() && !field.is_repeated();
 }
 

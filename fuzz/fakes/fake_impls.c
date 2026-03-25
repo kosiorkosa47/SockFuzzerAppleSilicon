@@ -81,7 +81,6 @@ bool PE_parse_boot_argn(const char* arg_string, void* arg_ptr, int max_arg) {
   // Just return 0 by default.
   memset(arg_ptr, 0, max_arg);
 
-  // assert(false);
   return false;
 }
 
@@ -89,7 +88,7 @@ void* os_log_create() { return (void*)1; }
 
 void pflog_packet() {}
 
-// TODO(nedwill): return a real vfs context
+// TODO(upstream): return a real vfs context
 void* vfs_context_current() { return NULL; }
 
 int csproc_get_platform_binary(void* p) { return 0; }
@@ -104,7 +103,7 @@ int uuid_compare(const uuid_t uu1, const uuid_t uu2) {
   return memcmp(uu1, uu2, sizeof(uuid_t));
 }
 
-// TODO(nedwill): this shouldn't return the same value
+// TODO(upstream): this shouldn't return the same value
 // within the same fuzz session (use a counter and reset)
 void uuid_generate_random(uuid_t out) {
   if (get_fuzzed_bool()) {
@@ -124,11 +123,11 @@ void uuid_copy(uuid_t dst, const uuid_t src) {
 
 void uuid_unparse_upper(const uuid_t uu, uuid_string_t out) {
   snprintf(out, sizeof(uuid_string_t),
-           "%c%c%c%c-"
-           "%c%c-"
-           "%c%c-"
-           "%c%c-"
-           "%c%c%c%c%c%c",
+           "%02X%02X%02X%02X-"
+           "%02X%02X-"
+           "%02X%02X-"
+           "%02X%02X-"
+           "%02X%02X%02X%02X%02X%02X",
            uu[0], uu[1], uu[2], uu[3], uu[4], uu[5], uu[6], uu[7], uu[8], uu[9],
            uu[10], uu[11], uu[12], uu[13], uu[14], uu[15]);
 }
@@ -141,15 +140,31 @@ extern void* kernproc;
 
 void* vfs_context_proc() { return kernproc; }
 
-// TODO(Ned): better timekeeping here
-uint64_t mach_continuous_time(void) { return 0; }
+// Progressive time counter — advances on each call so timer-driven code
+// paths (retransmission, keepalive, route expiry) are actually exercised.
+// Reset to 0 is implicit: the counter persists across iterations which
+// mimics monotonic system time.
+static uint64_t g_fake_time_counter = 1000000;  // start at 1ms in nanoseconds
+
+uint64_t mach_continuous_time(void) {
+  g_fake_time_counter += 100000;  // advance 100us per call
+  return g_fake_time_counter;
+}
 
 // TODO: handle timer scheduling
 void timeout() { assert(false); }
 
-void microtime(struct timeval* tvp) { memset(&tvp, 0, sizeof(tvp)); }
+void microtime(struct timeval* tvp) {
+  g_fake_time_counter += 100000;
+  tvp->tv_sec = g_fake_time_counter / 1000000000ULL;
+  tvp->tv_usec = (g_fake_time_counter / 1000ULL) % 1000000ULL;
+}
 
-void microuptime(struct timeval* tvp) { memset(&tvp, 0, sizeof(tvp)); }
+void microuptime(struct timeval* tvp) {
+  g_fake_time_counter += 100000;
+  tvp->tv_sec = g_fake_time_counter / 1000000000ULL;
+  tvp->tv_usec = (g_fake_time_counter / 1000ULL) % 1000000ULL;
+}
 
 int mac_socket_check_accepted() { return 0; }
 
@@ -206,19 +221,31 @@ bool lck_rw_try_lock_exclusive() { return true; }
 void* malloc(size_t size);
 void free(void* ptr);
 
-// TODO(nedwill): fix this hack
+// Sentinel address values used by the fuzzer harness.
+// USERADDR_FUZZED (1) means "use fuzzed bytes via copyin".
+// Any other non-null value is treated as a real userspace pointer.
+#define USERADDR_NULL    0
+#define USERADDR_FUZZED  1
+#define EFAULT_XNU       14
+
 __attribute__((visibility("default"))) bool real_copyout = true;
 
 int copyout(const void* kaddr, user_addr_t udaddr, size_t len) {
-  // randomly fail
+  if (!kaddr || len == 0) {
+    return 0;
+  }
+  // Randomly fail to exercise error paths.
   if (get_fuzzed_bool()) {
-    return 1;
+    return EFAULT_XNU;
   }
 
-  if (!udaddr || udaddr == 1 || !real_copyout) {
+  if (!udaddr || udaddr == USERADDR_FUZZED || !real_copyout) {
+    // Validate source is readable (ASAN will catch OOB).
     void* buf = malloc(len);
-    memcpy(buf, kaddr, len);
-    free(buf);
+    if (buf) {
+      memcpy(buf, kaddr, len);
+      free(buf);
+    }
     return 0;
   }
 
@@ -277,7 +304,10 @@ uint32_t IOMapperIOVMAlloc() { return 0; }
 
 int proc_uniqueid() { return 0; }
 
-uint64_t mach_absolute_time() { return 0; }
+uint64_t mach_absolute_time() {
+  g_fake_time_counter += 100000;
+  return g_fake_time_counter;
+}
 
 int proc_pid() { return 0; }
 
@@ -322,7 +352,7 @@ int kauth_cred_getuid() {
   return get_fuzzed_bool() ? 1 : 0;
 }
 
-char* proc_best_name() { return "kernproc"; }
+const char* proc_best_name() { return "kernproc"; }
 
 void* proc_find() { return kernproc; }
 
@@ -336,15 +366,18 @@ void ovbcopy(const char* from, char* to, size_t nbytes) {
 
 int __attribute__((warn_unused_result))
 copyin(const user_addr_t uaddr, void *kaddr, size_t len) {
-  // Address 1 means use fuzzed bytes, otherwise use real bytes.
-  // NOTE: this does not support nested useraddr.
-  if (uaddr != 1) {
+  if (!kaddr || len == 0) {
+    return 0;
+  }
+  // USERADDR_FUZZED means "generate fuzzed bytes"; any other non-null
+  // value is treated as a real pointer from the harness.
+  if (uaddr != USERADDR_FUZZED) {
     memcpy(kaddr, (void*)uaddr, len);
     return 0;
   }
 
   if (get_fuzzed_bool()) {
-    return -1;
+    return EFAULT_XNU;
   }
 
   get_fuzzed_bytes(kaddr, len);
@@ -373,7 +406,7 @@ void thread_call_enter_delayed() {}
 void MD5Init() {}
 void MD5Update() {}
 void MD5Final(unsigned char* digest, void* ctx) {
-  memset(digest, 0, 4);
+  memset(digest, 0, 16);  // MD5 digest is 16 bytes
 }
 
 void proc_rele() {}
@@ -436,8 +469,6 @@ void wakeup_one() {}
 int lck_mtx_try_lock_spin() { return 1; }
 
 void absolutetime_to_nanoseconds(uint64_t in, uint64_t* out) { *out = 0; }
-
-void free(void* ptr);
 
 void nwk_wq_enqueue(struct nwk_wq_entry* nwk_item) {
   nwk_item->func(nwk_item->arg);
@@ -530,7 +561,8 @@ long boottime_sec() { return 0; }
 void mac_socket_check_receive() {}
 void mac_socket_check_send() {}
 
-void kernel_debug() {}
+void kernel_debug(uint32_t debugid, uintptr_t arg1, uintptr_t arg2,
+    uintptr_t arg3, uintptr_t arg4, uintptr_t arg5) {}
 
 void lck_rw_unlock_shared() {}
 kern_return_t kmem_alloc_contig() { assert(false); }
@@ -544,14 +576,11 @@ ml_wait_max_cpus(void)
   return 1;
 }
 
-int
-fls(unsigned int mask)
-{
-	if (mask == 0) {
-		return 0;
-	}
-
-	return (sizeof(mask) << 3) - __builtin_clz(mask);
+int fls(unsigned int mask) {
+  if (mask == 0) {
+    return 0;
+  }
+  return (sizeof(mask) << 3) - __builtin_clz(mask);
 }
 
 int scnprintf(char *buf, size_t size, const char *fmt, ...) {
@@ -579,5 +608,5 @@ int proc_pidversion(proc_t p) {
 
 unsigned int kdebug_enable = 0;
 void kernel_debug_string_early(const char *message) {
-  printf("kernel_debug_string_early: %s\n", message);
+  (void)message;
 }

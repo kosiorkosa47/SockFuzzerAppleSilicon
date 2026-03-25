@@ -44,29 +44,23 @@ extern "C" {
 #include "types.h"
 }
 
-/*
-TODO(nedwill)
-
-Fuzz vsock domain
-*/
-
-// TODO(nedwill): support multiple addresses of each type below,
+// TODO(upstream): support multiple addresses of each type below,
 // not just one of each type
 void get_in6_addr(struct in6_addr *sai, enum In6Addr addr) {
   memset(sai, 0, sizeof(*sai));
   switch (addr) {
     case IN6_ADDR_SELF: {
       sai->__u6_addr.__u6_addr32[0] = 16810238;
-      sai->__u6_addr.__u6_addr32[0] = 0;
-      sai->__u6_addr.__u6_addr32[0] = 0;
-      sai->__u6_addr.__u6_addr32[0] = 16777216;
+      sai->__u6_addr.__u6_addr32[1] = 0;
+      sai->__u6_addr.__u6_addr32[2] = 0;
+      sai->__u6_addr.__u6_addr32[3] = 16777216;
       // assert(IN6_IS_ADDR_SELF(sai));
       break;
     }
     case IN6_ADDR_LINK_LOCAL: {
       sai->s6_addr[0] = 0xfe;
       sai->s6_addr[1] = 0x80;
-      // TODO(nedwill): set other fields?
+      // TODO(upstream): set other fields?
       assert(IN6_IS_ADDR_LINKLOCAL(sai));
       break;
     }
@@ -167,8 +161,8 @@ void get_in6_addr(struct in6_addr *sai, enum In6Addr addr) {
       sai->s6_addr16[5] = 0xaaaa;
       sai->s6_addr16[6] = 0xaaaa;
       sai->s6_addr16[7] = 0xaaaa;
+      break;
     }
-      // *sai = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, (uint8_t)addr};
   }
 }
 
@@ -214,10 +208,16 @@ std::string get_sockaddr(const SockAddr &sockaddr) {
       dat = std::string((char *)&sai, (char *)&sai + sizeof(sai));
       break;
     }
-    // case SockAddr::kRawBytes: {
-    //   dat = sockaddr.raw_bytes();
-    //   break;
-    // }
+    case SockAddr::kSockaddrUn: {
+      struct sockaddr_un sun = {};
+      sun.sun_len = sizeof(struct sockaddr_un);
+      sun.sun_family = AF_UNIX;
+      size_t pathlen = std::min(sockaddr.sockaddr_un().sun_path().size(),
+                                (size_t)(SUN_PATH_LEN - 1));
+      memcpy(sun.sun_path, sockaddr.sockaddr_un().sun_path().data(), pathlen);
+      dat = std::string((char *)&sun, (char *)&sun + sizeof(sun));
+      break;
+    }
     case SockAddr::SOCKADDR_NOT_SET: {
       break;
     }
@@ -229,9 +229,9 @@ std::string get_ip6_hdr(const Ip6Hdr &hdr, uint16_t expected_size) {
   struct ip6_hdr ip6_hdr;
   memset(&ip6_hdr, 0, sizeof(ip6_hdr));
   get_in6_addr(&ip6_hdr.ip6_src, hdr.ip6_src());
-  get_in6_addr(&ip6_hdr.ip6_dst, hdr.ip6_src());
+  get_in6_addr(&ip6_hdr.ip6_dst, hdr.ip6_dst());
   ip6_hdr.ip6_ctlun.ip6_un2_vfc = IPV6_VERSION;
-  // How TF does flow work?
+  // TODO: IPv6 flow label handling needs investigation
   // ip6_hdr.ip6_ctlun.ip6_un1.ip6_un1_flow = hdr.ip6_hdrctl().ip6_un1_flow();
   ip6_hdr.ip6_ctlun.ip6_un1.ip6_un1_plen =
       __builtin_bswap16(expected_size);  // hdr.ip6_hdrctl().ip6_un1_plen();
@@ -245,7 +245,7 @@ std::string get_ip_hdr(const IpHdr &hdr, size_t expected_size) {
   struct in_addr ip_src = {.s_addr = (unsigned int)hdr.ip_src()};
   struct in_addr ip_dst = {.s_addr = (unsigned int)hdr.ip_dst()};
   struct ip ip_hdr = {
-      .ip_hl = 5,    // TODO(nedwill): support options // hdr.ip_hl(),
+      .ip_hl = 5,    // TODO(upstream): support options // hdr.ip_hl(),
       .ip_v = IPV4,  // hdr.ip_v(),
       .ip_tos = (u_char)hdr.ip_tos(),
       .ip_len = (u_short)__builtin_bswap16(expected_size),
@@ -334,7 +334,11 @@ std::string get_ip6_route0_hdr(const Ip6Rt0Hdr &hdr) {
   ip6_rthdr0.ip6r0_type = hdr.ip6r0_type();
   ip6_rthdr0.ip6r0_segleft = hdr.ip6r0_segleft();
   ip6_rthdr0.ip6r0_reserved = hdr.ip6r0_reserved();
-  *(uint32_t *)&ip6_rthdr0.ip6r0_slmap[0] = hdr.ip6r0_slmap();
+  // ip6r0_slmap is 3 bytes — copy only 3 to avoid overflowing into ip6r0_addr.
+  {
+    uint32_t slmap = hdr.ip6r0_slmap();
+    memcpy(ip6_rthdr0.ip6r0_slmap, &slmap, sizeof(ip6_rthdr0.ip6r0_slmap));
+  }
 
   int i = 0;
   for (int in6addr : hdr.ip6r0_addr()) {
@@ -416,10 +420,16 @@ bool get_fuzzed_bool(void) {
 }
 
 int get_fuzzed_int32(int low, int high) {
+  if (!fdp) {
+    return low;
+  }
   return fdp->ConsumeIntegralInRange<int>(low, high);
 }
 
 unsigned int get_fuzzed_uint32(unsigned int low, unsigned int high) {
+  if (!fdp) {
+    return low;
+  }
   return fdp->ConsumeIntegralInRange<unsigned int>(low, high);
 }
 
@@ -447,19 +457,23 @@ void get_in6_addrlifetime_64(struct in6_addrlifetime_64 *sai,
 
 void get_ifr_name(void *dest, const IfrName name) {
   switch (name) {
-    case LO0: {
+    case LO0:
       memcpy(dest, "lo0", sizeof("lo0"));
       break;
-    }
-    case STF0: {
+    case STF0:
       memcpy(dest, "stf0", sizeof("stf0"));
       break;
-    }
+    case EN0:
+      memcpy(dest, "en0", sizeof("en0"));
+      break;
+    case BRIDGE0:
+      memcpy(dest, "bridge0", sizeof("bridge0"));
+      break;
   }
 }
 
 // NECP client wrappers
-// TODO(nedwill): move these to their own file
+// TODO(upstream): move these to their own file
 void necp_client_add(int fd, NecpClientId client_id, unsigned char *data,
                      size_t size) {
   std::string client_id_s = GetNecpClient(client_id);
@@ -470,7 +484,7 @@ void necp_client_add(int fd, NecpClientId client_id, unsigned char *data,
                              client_id_s.size(), data, size, &retval);
 }
 
-// TODO(nedwill): support flow_ifnet_stats
+// TODO(upstream): support flow_ifnet_stats
 void necp_client_remove(int fd, NecpClientId client_id) {
   std::string client_id_s = GetNecpClient(client_id);
   int retval = 0;
@@ -560,7 +574,7 @@ void DoTcpInput(const TcpPacket &tcp_packet) {
     return;
   }
 
-  // TODO(nedwill): fuzz structure of mbuf itself
+  // TODO(upstream): fuzz structure of mbuf itself
   void *mbuf_data = get_mbuf_data(packet_s.data(), packet_s.size(), PKTF_LOOP);
   if (!mbuf_data) {
     return;
@@ -572,7 +586,7 @@ void DoTcpInput(const TcpPacket &tcp_packet) {
 void DoTcp6Input(const Tcp6Packet &tcp6_packet) {
   std::string packet_s;
 
-  // TODO(nedwill): support hop-by-hop and other options
+  // TODO(upstream): support hop-by-hop and other options
   size_t expected_size = sizeof(struct tcphdr) + tcp6_packet.data().size();
   packet_s += get_ip6_hdr(tcp6_packet.ip6_hdr(), expected_size);
   packet_s += get_tcp_hdr(tcp6_packet.tcp_hdr());
@@ -616,6 +630,78 @@ void DoIp6Packet(const Ip6Packet &packet) {
   ip6_input_wrapper(mbuf_data);
 }
 
+void DoUdpInput(const UdpPacket &udp_packet) {
+  struct udphdr udphdr = {
+      .uh_sport = (u_int16_t)udp_packet.udp_hdr().uh_sport(),
+      .uh_dport = (u_int16_t)udp_packet.udp_hdr().uh_dport(),
+      .uh_ulen = __builtin_bswap16(sizeof(struct udphdr) +
+                                    udp_packet.data().size()),
+      .uh_sum = 0,
+  };
+  size_t expected_size =
+      sizeof(struct ip) + sizeof(struct udphdr) + udp_packet.data().size();
+  std::string packet_s = get_ip_hdr(udp_packet.ip_hdr(), expected_size);
+  packet_s += std::string((char *)&udphdr, (char *)&udphdr + sizeof(udphdr));
+  packet_s += udp_packet.data();
+
+  if (packet_s.empty()) return;
+  void *mbuf_data = get_mbuf_data(packet_s.data(), packet_s.size(), PKTF_LOOP);
+  if (!mbuf_data) return;
+  ip_input_wrapper(mbuf_data);
+}
+
+void DoUdp6Input(const Udp6Packet &udp6_packet) {
+  struct udphdr udphdr = {
+      .uh_sport = (u_int16_t)udp6_packet.udp_hdr().uh_sport(),
+      .uh_dport = (u_int16_t)udp6_packet.udp_hdr().uh_dport(),
+      .uh_ulen = __builtin_bswap16(sizeof(struct udphdr) +
+                                    udp6_packet.data().size()),
+      .uh_sum = 0,
+  };
+  size_t expected_size =
+      sizeof(struct udphdr) + udp6_packet.data().size();
+  std::string packet_s = get_ip6_hdr(udp6_packet.ip6_hdr(), expected_size);
+  packet_s += std::string((char *)&udphdr, (char *)&udphdr + sizeof(udphdr));
+  packet_s += udp6_packet.data();
+
+  if (packet_s.empty()) return;
+  void *mbuf_data = get_mbuf_data(packet_s.data(), packet_s.size(), PKTF_LOOP);
+  if (!mbuf_data) return;
+  ip6_input_wrapper(mbuf_data);
+}
+
+void DoIcmp4Input(const Icmp4Packet &icmp4_packet) {
+  struct icmp_hdr hdr = {
+      .icmp_type = (uint8_t)icmp4_packet.icmp_hdr().icmp_type(),
+      .icmp_code = (uint8_t)icmp4_packet.icmp_hdr().icmp_code(),
+      .icmp_cksum = 0,
+      .icmp_data = icmp4_packet.icmp_hdr().icmp_data(),
+  };
+  size_t expected_size =
+      sizeof(struct ip) + sizeof(struct icmp_hdr) + icmp4_packet.data().size();
+  std::string packet_s = get_ip_hdr(icmp4_packet.ip_hdr(), expected_size);
+  packet_s += std::string((char *)&hdr, (char *)&hdr + sizeof(hdr));
+  packet_s += icmp4_packet.data();
+
+  if (packet_s.empty()) return;
+  void *mbuf_data = get_mbuf_data(packet_s.data(), packet_s.size(), PKTF_LOOP);
+  if (!mbuf_data) return;
+  ip_input_wrapper(mbuf_data);
+}
+
+void DoIcmp6Input(const Icmp6Packet &icmp6_packet) {
+  size_t expected_size =
+      sizeof(struct icmp6_hdr) + icmp6_packet.data().size();
+  std::string packet_s = get_ip6_hdr(icmp6_packet.ip6_hdr(), expected_size);
+  packet_s += get_icmp6_hdr(icmp6_packet.icmp6_hdr());
+  packet_s += icmp6_packet.data();
+
+  if (packet_s.empty()) return;
+  void *mbuf_data = get_mbuf_data(packet_s.data(), packet_s.size(), PKTF_LOOP);
+  if (!mbuf_data) return;
+  ip6_input_wrapper(mbuf_data);
+}
+
 void DoIpInput(const Packet &packet) {
   switch (packet.packet_case()) {
     case Packet::kTcpPacket: {
@@ -632,6 +718,22 @@ void DoIpInput(const Packet &packet) {
     }
     case Packet::kIp6Packet: {
       DoIp6Packet(packet.ip6_packet());
+      break;
+    }
+    case Packet::kUdpPacket: {
+      DoUdpInput(packet.udp_packet());
+      break;
+    }
+    case Packet::kUdp6Packet: {
+      DoUdp6Input(packet.udp6_packet());
+      break;
+    }
+    case Packet::kIcmp4Packet: {
+      DoIcmp4Input(packet.icmp4_packet());
+      break;
+    }
+    case Packet::kIcmp6Packet: {
+      DoIcmp6Input(packet.icmp6_packet());
       break;
     }
     case Packet::kRawIp4: {
@@ -660,12 +762,229 @@ void DoIpInput(const Packet &packet) {
   }
 }
 
-// TODO(nedwill): make alternative build of this function that runs the
-// the testcases against the real XNU syscalls, also KCOV-enabled
+// ---------------------------------------------------------------------------
+// Command handlers — one function per command type for readability.
+// Each handler returns void; side effects flow through the kernel stubs.
+// ---------------------------------------------------------------------------
+
+void HandleSocket(const Command &command, std::set<int> &open_fds) {
+  int fd = 0;
+  int err = socket_wrapper(command.socket().domain(),
+                           command.socket().so_type(),
+                           command.socket().protocol(), &fd);
+  if (err == 0) {
+    assert(open_fds.find(fd) == open_fds.end());
+    open_fds.insert(fd);
+  }
+}
+
+void HandleSetSockOpt(const Command &command) {
+  int s = command.set_sock_opt().fd();
+  int level = command.set_sock_opt().level();
+  int name = command.set_sock_opt().name();
+
+  std::string val_data;
+  if (command.set_sock_opt().has_val()) {
+    const SockOptVal &sov = command.set_sock_opt().val();
+    switch (sov.val_case()) {
+      case SockOptVal::kRaw:
+        val_data = sov.raw();
+        break;
+      case SockOptVal::kIntVal: {
+        int32_t v = sov.int_val().value();
+        val_data = std::string((char *)&v, (char *)&v + sizeof(v));
+        break;
+      }
+      case SockOptVal::kLinger: {
+        struct linger l = {
+            .l_onoff = sov.linger().l_onoff(),
+            .l_linger = sov.linger().l_linger(),
+        };
+        val_data = std::string((char *)&l, (char *)&l + sizeof(l));
+        break;
+      }
+      case SockOptVal::kMreq: {
+        struct ip_mreq m = {};
+        m.imr_multiaddr.s_addr = (unsigned int)sov.mreq().imr_multiaddr();
+        m.imr_interface.s_addr = (unsigned int)sov.mreq().imr_interface();
+        val_data = std::string((char *)&m, (char *)&m + sizeof(m));
+        break;
+      }
+      case SockOptVal::kTimeval: {
+        struct timeval tv = {
+            .tv_sec = (long)sov.timeval().tv_sec(),
+            .tv_usec = (int)sov.timeval().tv_usec(),
+        };
+        val_data = std::string((char *)&tv, (char *)&tv + sizeof(tv));
+        break;
+      }
+      case SockOptVal::VAL_NOT_SET:
+        break;
+    }
+  }
+
+  setsockopt_wrapper(s, level, name, (caddr_t)val_data.data(),
+                     val_data.size(), nullptr);
+}
+
+void HandleGetSockOpt(const Command &command) {
+  int s = command.get_sock_opt().fd();
+  int level = command.get_sock_opt().level();
+  int name = command.get_sock_opt().name();
+  socklen_t size = command.get_sock_opt().size();
+  if (size > 4096) {
+    return;
+  }
+  std::unique_ptr<char[]> val(new char[size]);
+  getsockopt_wrapper(s, level, name, val.get(), &size, nullptr);
+}
+
+void HandleIoctl(const Command &command) {
+  uint32_t fd = command.ioctl().fd();
+  uint32_t idx = command.ioctl().ioctl_idx();
+  if (idx == 0 || idx > (uint32_t)num_ioctls) {
+    return;
+  }
+  uint32_t com = ioctls[idx - 1];
+  real_copyout = false;
+  ioctl_wrapper(fd, com, /*data=*/(caddr_t)1, nullptr);
+  real_copyout = true;
+}
+
+void HandleIoctlReal(const Command &command) {
+  switch (command.ioctl_real().ioctl_case()) {
+    case IoctlReal::kSiocaifaddrIn664: {
+      const In6_AliasReq_64 &req = command.ioctl_real().siocaifaddr_in6_64();
+      struct in6_aliasreq_64 alias = {};
+      memcpy(alias.ifra_name, req.ifra_name().data(),
+             std::min(req.ifra_name().size(), sizeof(alias.ifra_name)));
+      get_sockaddr6(&alias.ifra_addr, req.ifra_addr());
+      get_sockaddr6(&alias.ifra_dstaddr, req.ifra_dstaddr());
+      get_sockaddr6(&alias.ifra_prefixmask, req.ifra_prefixmask());
+      for (int flag : req.ifra_flags()) {
+        alias.ifra_flags ^= flag;
+      }
+      get_in6_addrlifetime_64(&alias.ifra_lifetime, req.ifra_lifetime());
+      ioctl_wrapper(command.ioctl_real().fd(), siocaifaddr_in6_64,
+                    (caddr_t)&alias, nullptr);
+      break;
+    }
+    case IoctlReal::kSiocsifflags: {
+      struct ifreq ifreq = {};
+      for (int flag : command.ioctl_real().siocsifflags().flags()) {
+        ifreq.ifr_flags |= flag;
+      }
+      get_ifr_name(ifreq.ifr_name, LO0);
+      ioctl_wrapper(command.ioctl_real().fd(), siocsifflags,
+                    (caddr_t)&ifreq, nullptr);
+      break;
+    }
+    case IoctlReal::IOCTL_NOT_SET:
+      break;
+  }
+}
+
+void HandleConnectx(const Command &command, std::vector<uint32_t> &cids) {
+  bool has_srcaddr = command.connectx().endpoints().has_sae_srcaddr();
+
+  std::string srcaddr_s;
+  if (has_srcaddr) {
+    srcaddr_s = get_sockaddr(command.connectx().endpoints().sae_srcaddr());
+  }
+  std::string dstaddr_s =
+      get_sockaddr(command.connectx().endpoints().sae_dstaddr());
+
+  void *srcaddr = (void *)srcaddr_s.data();
+  uint32_t srcsize = srcaddr_s.size();
+  if (!has_srcaddr) {
+    srcaddr = nullptr;
+    assert(!srcsize);
+  }
+
+  void *dstaddr = (void *)dstaddr_s.data();
+  uint32_t dstsize = dstaddr_s.size();
+
+  uint32_t connectx_flags = 0;
+  for (const int flag : command.connectx().flags()) {
+    connectx_flags |= flag;
+  }
+  uint32_t cid = 0;
+
+  struct user64_sa_endpoints endpoints = {
+      .sae_srcif = static_cast<unsigned int>(
+          command.connectx().endpoints().sae_srcif()),
+      .sae_srcaddr = (user64_addr_t)srcaddr,
+      .sae_srcaddrlen = srcsize,
+      .sae_dstaddr = (user64_addr_t)dstaddr,
+      .sae_dstaddrlen = dstsize};
+
+  size_t len = 0;
+  // TODO(upstream): add IOV mocking
+  connectx_wrapper(command.connectx().socket(), &endpoints,
+                   command.connectx().associd(), connectx_flags, nullptr, 0,
+                   &len, &cid, nullptr);
+  cids.push_back(cid);
+}
+
+void HandleDisconnectx(const Command &command,
+                       const std::vector<uint32_t> &cids) {
+  uint32_t cid = 0;
+  if (!cids.empty()) {
+    cid = cids[command.disconnectx().cid() % cids.size()];
+  } else {
+    cid = command.disconnectx().cid();
+  }
+  disconnectx_wrapper(command.disconnectx().fd(),
+                      command.disconnectx().associd(), cid, nullptr);
+}
+
+void HandleSocketpair(const Command &command, std::set<int> &open_fds) {
+  int rsv[2] = {};
+  int retval = 0;
+  int ret = socketpair_wrapper(command.socketpair().domain(),
+                               command.socketpair().type(),
+                               command.socketpair().protocol(), rsv, &retval);
+  if (!ret) {
+    assert(open_fds.find(rsv[0]) == open_fds.end());
+    open_fds.insert(rsv[0]);
+    assert(open_fds.find(rsv[1]) == open_fds.end());
+    open_fds.insert(rsv[1]);
+  }
+}
+
+void HandlePipe(std::set<int> &open_fds) {
+  int rsv[2] = {};
+  int ret = pipe_wrapper(rsv);
+  if (!ret) {
+    assert(open_fds.find(rsv[0]) == open_fds.end());
+    open_fds.insert(rsv[0]);
+    assert(open_fds.find(rsv[1]) == open_fds.end());
+    open_fds.insert(rsv[1]);
+  }
+}
+
+void HandleSendmsg(const Command &command, int &retval) {
+  const Sendmsg &sm = command.sendmsg();
+
+  std::string sockaddr_s;
+  if (sm.has_to()) {
+    sockaddr_s = get_sockaddr(sm.to());
+  }
+
+  // Build a minimal user64_msghdr with the data
+  user64_msghdr msg = {};
+  if (!sockaddr_s.empty()) {
+    msg.msg_name = (user64_addr_t)sockaddr_s.data();
+    msg.msg_namelen = sockaddr_s.size();
+  }
+
+  sendmsg_wrapper(sm.s(), (caddr_t)&msg, sm.flags(), &retval);
+}
+
+// ---------------------------------------------------------------------------
+// Main fuzzer entry point
+// ---------------------------------------------------------------------------
 DEFINE_BINARY_PROTO_FUZZER(const Session &session) {
-  // std::string str;
-  // google::protobuf::TextFormat::PrintToString(session, &str);
-  // std::cout << str;
   if (!ready) {
     initialize_network();
     init_proc();
@@ -676,246 +995,113 @@ DEFINE_BINARY_PROTO_FUZZER(const Session &session) {
                         session.data_provider().size());
   fdp = &dp;
 
-  // TODO(nedwill): Make these containers own the references to their
-  // objects so that we can use RAII to avoid leaks.
   std::vector<uint32_t> cids;
   std::set<int> open_fds;
 
   for (const Command &command : session.commands()) {
     int retval = 0;
     switch (command.command_case()) {
-      case Command::kSocket: {
-        int fd = 0;
-        int err = socket_wrapper(command.socket().domain(),
-                                 command.socket().so_type(),
-                                 command.socket().protocol(), &fd);
-        if (err == 0) {
-          // Make sure we're tracking fds properly.
-          if (open_fds.find(fd) != open_fds.end()) {
-            printf("Found existing fd %d\n", fd);
-            assert(false);
-          }
-          open_fds.insert(fd);
-        }
+      case Command::kSocket:
+        HandleSocket(command, open_fds);
         break;
-      }
-      case Command::kClose: {
+      case Command::kClose:
         open_fds.erase(command.close().fd());
         close_wrapper(command.close().fd(), nullptr);
         break;
-      }
-      case Command::kSetSockOpt: {
-        int s = command.set_sock_opt().fd();
-        int level = command.set_sock_opt().level();
-        int name = command.set_sock_opt().name();
-        size_t size = command.set_sock_opt().val().size();
-        std::unique_ptr<char[]> val(new char[size]);
-        memcpy(val.get(), command.set_sock_opt().val().data(), size);
-        setsockopt_wrapper(s, level, name, val.get(), size, nullptr);
+      case Command::kSetSockOpt:
+        HandleSetSockOpt(command);
         break;
-      }
-      case Command::kGetSockOpt: {
-        int s = command.get_sock_opt().fd();
-        int level = command.get_sock_opt().level();
-        int name = command.get_sock_opt().name();
-        socklen_t size = command.get_sock_opt().size();
-        if (size < 0 || size > 4096) {
-          break;
-        }
-        std::unique_ptr<char[]> val(new char[size]);
-        getsockopt_wrapper(s, level, name, val.get(), &size, nullptr);
+      case Command::kGetSockOpt:
+        HandleGetSockOpt(command);
         break;
-      }
       case Command::kBind: {
         std::string sockaddr_s = get_sockaddr(command.bind().sockaddr());
         bind_wrapper(command.bind().fd(), (caddr_t)sockaddr_s.data(),
                      sockaddr_s.size(), nullptr);
         break;
       }
-      case Command::kIoctl: {
-        // TODO: pick these values more efficiently
-        // XXX: these mutate global state
-        uint32_t fd = command.ioctl().fd();
-        uint32_t com = ioctls[command.ioctl().ioctl_idx() - 1];
-        real_copyout = false;
-        ioctl_wrapper(fd, com, /*data=*/(caddr_t)1, nullptr);
-        real_copyout = true;
+      case Command::kIoctl:
+        HandleIoctl(command);
         break;
-      }
       case Command::kAccept: {
         std::string sockaddr_s = get_sockaddr(command.accept().sockaddr());
         socklen_t size = sockaddr_s.size();
-        int retval = 0;
-        accept_wrapper(command.accept().fd(), (caddr_t)sockaddr_s.data(), &size,
-                       &retval);
+        accept_wrapper(command.accept().fd(), (caddr_t)sockaddr_s.data(),
+                       &size, &retval);
         break;
       }
-      case Command::kIpInput: {
+      case Command::kIpInput:
         DoIpInput(command.ip_input());
         break;
-      }
-      case Command::kIoctlReal: {
-        switch (command.ioctl_real().ioctl_case()) {
-          case IoctlReal::kSiocaifaddrIn664: {
-            const In6_AliasReq_64 &req =
-                command.ioctl_real().siocaifaddr_in6_64();
-            struct in6_aliasreq_64 alias = {};
-            memcpy(alias.ifra_name, req.ifra_name().data(),
-                   std::min(req.ifra_name().size(), sizeof(alias.ifra_name)));
-            get_sockaddr6(&alias.ifra_addr, req.ifra_addr());
-            get_sockaddr6(&alias.ifra_dstaddr, req.ifra_dstaddr());
-            get_sockaddr6(&alias.ifra_prefixmask, req.ifra_prefixmask());
-            for (int flag : req.ifra_flags()) {
-              // make mutations that dupe a flag more useful by xoring
-              alias.ifra_flags ^= flag;
-            }
-            get_in6_addrlifetime_64(&alias.ifra_lifetime, req.ifra_lifetime());
-            ioctl_wrapper(command.ioctl_real().fd(), siocaifaddr_in6_64,
-                          (caddr_t)&alias, nullptr);
-          }
-          case IoctlReal::kSiocsifflags: {
-            struct ifreq ifreq = {};
-            for (int flag : command.ioctl_real().siocsifflags().flags()) {
-              ifreq.ifr_flags |= flag;
-            }
-            get_ifr_name(ifreq.ifr_name, LO0);
-            ioctl_wrapper(command.ioctl_real().fd(), siocsifflags,
-                          (caddr_t)&ifreq, nullptr);
-            break;
-          }
-          case IoctlReal::IOCTL_NOT_SET: {
-            break;
-          }
-        }
-      }
-      case Command::kConnectx: {
-        bool has_srcaddr = command.connectx().endpoints().has_sae_srcaddr();
-
-        std::string srcaddr_s;
-        if (has_srcaddr) {
-          srcaddr_s =
-              get_sockaddr(command.connectx().endpoints().sae_srcaddr());
-        }
-
-        std::string dstaddr_s =
-            get_sockaddr(command.connectx().endpoints().sae_dstaddr());
-
-        void *srcaddr = (void *)srcaddr_s.data();
-        uint32_t srcsize = srcaddr_s.size();
-        if (!has_srcaddr) {
-          srcaddr = nullptr;
-          assert(!srcsize);
-        }
-
-        void *dstaddr = (void *)dstaddr_s.data();
-        uint32_t dstsize = dstaddr_s.size();
-
-        // We ignore failure here since it's ok to try to send things regardless
-        uint32_t connectx_flags = 0;
-        for (const int flag : command.connectx().flags()) {
-          connectx_flags |= flag;
-        }
-        uint32_t cid = 0;
-
-        struct user64_sa_endpoints endpoints = {
-            .sae_srcif = static_cast<unsigned int>(command.connectx().endpoints().sae_srcif()),
-            .sae_srcaddr = (user64_addr_t)srcaddr,
-            .sae_srcaddrlen = srcsize,
-            .sae_dstaddr = (user64_addr_t)dstaddr,
-            .sae_dstaddrlen = dstsize};
-
-        // TODO(nedwill): is this a return value?
-        size_t len = 0;
-        // TODO(nedwill): add IOV mocking
-        connectx_wrapper(command.connectx().socket(), &endpoints,
-                         command.connectx().associd(), connectx_flags, nullptr,
-                         0, &len, &cid, nullptr);
-        cids.push_back(cid);
+      case Command::kIoctlReal:
+        HandleIoctlReal(command);
         break;
-      }
+      case Command::kConnectx:
+        HandleConnectx(command, cids);
+        break;
       case Command::kConnect: {
         std::string sockaddr_s = get_sockaddr(command.connect().sockaddr());
         connect_wrapper(command.connect().fd(), (caddr_t)sockaddr_s.data(),
                         sockaddr_s.size(), nullptr);
         break;
       }
-      case Command::kListen: {
+      case Command::kListen:
         listen_wrapper(command.listen().socket(), command.listen().backlog(),
                        nullptr);
         break;
-      }
-      case Command::kDisconnectx: {
-        uint32_t cid = 0;
-        if (!cids.empty()) {
-          cid = cids[command.disconnectx().cid() % cids.size()];
-        } else {
-          cid = command.disconnectx().cid();
-        }
-        disconnectx_wrapper(command.disconnectx().fd(),
-                            command.disconnectx().associd(), cid, nullptr);
+      case Command::kDisconnectx:
+        HandleDisconnectx(command, cids);
         break;
-      }
-      case Command::kClearAll: {
-        // TODO(nedwill): finer-grained calling of clear_all functions here
+      case Command::kClearAll:
         clear_all();
         break;
-      }
       case Command::kNecpMatchPolicy: {
-        std::unique_ptr<uint8_t[]> parameters_u8(
+        std::unique_ptr<uint8_t[]> params(
             new uint8_t[command.necp_match_policy().parameters().size()]);
-        memcpy(parameters_u8.get(),
+        memcpy(params.get(),
                command.necp_match_policy().parameters().data(),
                command.necp_match_policy().parameters().size());
-        // necp_match_policy_wrapper(
-        //     parameters_u8.get(),
-        //     command.necp_match_policy().parameters().size(),
-        //     /*returned_result*/ nullptr, nullptr);
+        necp_match_policy_wrapper(
+            params.get(),
+            command.necp_match_policy().parameters().size(),
+            /*returned_result=*/nullptr, &retval);
         break;
       }
       case Command::kNecpOpen: {
-        // int flags = 0;
-        // for (int flag : command.necp_open().flags()) {
-        //   flags |= flag;
-        // }
-        // int fd = 0;
-        // int err = necp_open_wrapper(flags, &fd);
-        // if (err == 0) {
-        //   if (open_fds.find(fd) != open_fds.end()) {
-        //     printf("fd %d already in open sockets\n", fd);
-        //     assert(false);
-        //   }
-        //   open_fds.insert(fd);
-        // }
+        int flags = 0;
+        for (int flag : command.necp_open().flags()) {
+          flags |= flag;
+        }
+        int fd = 0;
+        int err = necp_open_wrapper(flags, &fd);
+        if (err == 0) {
+          assert(open_fds.find(fd) == open_fds.end());
+          open_fds.insert(fd);
+        }
         break;
       }
-      case Command::kNecpClientAction: {
-        // DoNecpClientAction(command.necp_client_action());
+      case Command::kNecpClientAction:
+        DoNecpClientAction(command.necp_client_action());
         break;
-      }
       case Command::kNecpSessionOpen: {
-        // int flags = 0;
-        // int fd = 0;
-        // int err = necp_session_open_wrapper(flags, &fd);
-        // if (err == 0) {
-        //   if (open_fds.find(fd) != open_fds.end()) {
-        //     printf("fd %d already in open sockets\n", fd);
-        //     assert(false);
-        //   }
-        //   open_fds.insert(fd);
-        // }
+        int fd = 0;
+        int err = necp_session_open_wrapper(0, &fd);
+        if (err == 0) {
+          assert(open_fds.find(fd) == open_fds.end());
+          open_fds.insert(fd);
+        }
         break;
       }
       case Command::kNecpSessionAction: {
         size_t out_buffer_size =
             command.necp_session_action().out_buffer_size() % 4096;
         std::unique_ptr<uint8_t[]> out_buffer(new uint8_t[out_buffer_size]);
-        // necp_session_action_wrapper(
-        //     command.necp_session_action().necp_fd(),
-        //     command.necp_session_action().action(),
-        //     // TODO(nedwill): fix const cast
-        //     (uint8_t *)command.necp_session_action().in_buffer().data(),
-        //     command.necp_session_action().in_buffer().size(), out_buffer.get(),
-        //     out_buffer_size, &retval);
+        necp_session_action_wrapper(
+            command.necp_session_action().necp_fd(),
+            command.necp_session_action().action(),
+            (uint8_t *)command.necp_session_action().in_buffer().data(),
+            command.necp_session_action().in_buffer().size(),
+            out_buffer.get(), out_buffer_size, &retval);
         break;
       }
       case Command::kAcceptNocancel: {
@@ -947,19 +1133,18 @@ DEFINE_BINARY_PROTO_FUZZER(const Session &session) {
                             (caddr_t)sockaddr_s.data(), &size, &retval);
         break;
       }
-      case Command::kPeeloff: {
+      case Command::kPeeloff:
         peeloff_wrapper(command.peeloff().s(), command.peeloff().aid(),
                         &retval);
         break;
-      }
       case Command::kRecvfrom: {
         std::string sockaddr_s = get_sockaddr(command.recvfrom().from());
         int size = sockaddr_s.size();
-        // TODO(nedwill): just specify the size of the buffer, don't store bytes
-        // in the proto message just for them to be overwritten
+        size_t bufsize = command.recvfrom().buf().size();
+        std::unique_ptr<char[]> recvbuf(new char[bufsize]);
         recvfrom_wrapper(
-            command.recvfrom().s(), (caddr_t)command.recvfrom().buf().data(),
-            command.recvfrom().buf().size(), command.recvfrom().flags(),
+            command.recvfrom().s(), (caddr_t)recvbuf.get(),
+            bufsize, command.recvfrom().flags(),
             (struct sockaddr *)sockaddr_s.data(), &size, &retval);
         break;
       }
@@ -967,16 +1152,17 @@ DEFINE_BINARY_PROTO_FUZZER(const Session &session) {
         std::string sockaddr_s =
             get_sockaddr(command.recvfrom_nocancel().from());
         int size = sockaddr_s.size();
+        size_t bufsize = command.recvfrom_nocancel().buf().size();
+        std::unique_ptr<char[]> recvbuf(new char[bufsize]);
         recvfrom_nocancel_wrapper(
             command.recvfrom_nocancel().s(),
-            (caddr_t)command.recvfrom_nocancel().buf().data(),
-            command.recvfrom_nocancel().buf().size(),
+            (caddr_t)recvbuf.get(), bufsize,
             command.recvfrom_nocancel().flags(),
             (struct sockaddr *)sockaddr_s.data(), &size, &retval);
         break;
       }
       case Command::kRecvmsg: {
-        // TODO(nedwill): fuzz this msg field
+        // TODO(upstream): fuzz this msg field
         user64_msghdr msg = {};
         recvmsg_wrapper(command.recvmsg().s(), (struct msghdr *)&msg,
                         command.recvmsg().flags(), &retval);
@@ -991,46 +1177,21 @@ DEFINE_BINARY_PROTO_FUZZER(const Session &session) {
                        (caddr_t)sockaddr_s.data(), size, &retval);
         break;
       }
-      case Command::kSocketpair: {
-        int rsv[2] = {};
-        int ret = socketpair_wrapper(
-            command.socketpair().domain(), command.socketpair().type(),
-            command.socketpair().protocol(), rsv, &retval);
-        if (!ret) {
-          if (open_fds.find(rsv[0]) != open_fds.end()) {
-            assert(false);
-          }
-          open_fds.insert(rsv[0]);
-          if (open_fds.find(rsv[1]) != open_fds.end()) {
-            assert(false);
-          }
-          open_fds.insert(rsv[1]);
-        }
+      case Command::kSocketpair:
+        HandleSocketpair(command, open_fds);
         break;
-      }
-      case Command::kPipe: {
-        int rsv[2] = {};
-        int ret = pipe_wrapper(rsv);
-        if (!ret) {
-          if (open_fds.find(rsv[0]) != open_fds.end()) {
-            assert(false);
-          }
-          open_fds.insert(rsv[0]);
-          if (open_fds.find(rsv[1]) != open_fds.end()) {
-            assert(false);
-          }
-          open_fds.insert(rsv[1]);
-        }
+      case Command::kPipe:
+        HandlePipe(open_fds);
         break;
-      }
-      case Command::kShutdown: {
+      case Command::kShutdown:
         shutdown_wrapper(command.shutdown().s(), command.shutdown().how(),
                          &retval);
         break;
-      }
-      case Command::COMMAND_NOT_SET: {
+      case Command::kSendmsg:
+        HandleSendmsg(command, retval);
         break;
-      }
+      case Command::COMMAND_NOT_SET:
+        break;
     }
   }
 
@@ -1039,8 +1200,6 @@ DEFINE_BINARY_PROTO_FUZZER(const Session &session) {
     assert(err != EBADF);
   }
 
-  // TODO(nedwill): split up these worker threads and run them as
-  // part of main loop
   clear_all();
 }
 }

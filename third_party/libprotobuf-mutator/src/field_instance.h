@@ -176,7 +176,7 @@ class ConstFieldInstance {
                                             WireFormatLite::PARSE, "");
   }
 
-  std::string name() const { return descriptor_->name(); }
+  std::string name() const { return std::string(descriptor_->name()); }
 
   protobuf::FieldDescriptor::CppType cpp_type() const {
     return descriptor_->cpp_type();
@@ -191,17 +191,20 @@ class ConstFieldInstance {
   }
 
   bool EnforceUtf8() const {
+    // In protobuf v4+ (v34+), FileDescriptor::syntax() and SYNTAX_PROTO3
+    // were removed.  For proto3 string fields, has_presence() is false
+    // for implicit-presence scalars. We approximate the old check.
     return descriptor_->type() == protobuf::FieldDescriptor::TYPE_STRING &&
-           descriptor()->file()->syntax() ==
-               protobuf::FileDescriptor::SYNTAX_PROTO3;
+           !descriptor_->is_repeated() &&
+           !descriptor_->has_presence();
   }
 
   const protobuf::FieldDescriptor* descriptor() const { return descriptor_; }
 
   std::string DebugString() const {
-    std::string s = descriptor_->DebugString();
+    std::string s = std::string(descriptor_->DebugString());
     if (is_repeated()) s += "[" + std::to_string(index_) + "]";
-    return s + " of\n" + message_->DebugString();
+    return s + " of\n" + std::string(message_->DebugString());
   }
 
  protected:

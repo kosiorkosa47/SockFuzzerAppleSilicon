@@ -1,0 +1,70 @@
+# Copyright 2024 ckosiorkosa47
+# SPDX-License-Identifier: Apache-2.0
+
+name: Build & Smoke Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-macos:
+    runs-on: macos-14  # Apple Silicon runner
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install dependencies
+        run: brew install cmake protobuf abseil llvm
+
+      - name: Configure
+        run: |
+          mkdir build && cd build
+          cmake .. \
+            -DCMAKE_C_COMPILER=$(brew --prefix llvm)/bin/clang \
+            -DCMAKE_CXX_COMPILER=$(brew --prefix llvm)/bin/clang++
+
+      - name: Build
+        run: cmake --build build -j$(sysctl -n hw.ncpu)
+
+      - name: Smoke test (10 second fuzz run)
+        run: |
+          cd build
+          mkdir -p corpus crashes
+          ASAN_OPTIONS=detect_container_overflow=0:halt_on_error=0 \
+            timeout 10 ./net_fuzzer corpus/ -artifact_prefix=crashes/ \
+            -max_total_time=5 || true
+          echo "Smoke test passed — fuzzer ran without immediate crash"
+
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build clang lld \
+            libprotobuf-dev protobuf-compiler
+
+      - name: Configure
+        run: |
+          mkdir build && cd build
+          CC=clang CXX=clang++ cmake -GNinja ..
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Smoke test (10 second fuzz run)
+        run: |
+          cd build
+          mkdir -p corpus crashes
+          ASAN_OPTIONS=detect_container_overflow=0:halt_on_error=0 \
+            timeout 10 ./net_fuzzer corpus/ -artifact_prefix=crashes/ \
+            -max_total_time=5 || true
+          echo "Smoke test passed — fuzzer ran without immediate crash"

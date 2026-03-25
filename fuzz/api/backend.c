@@ -100,7 +100,8 @@ __attribute__((visibility("default"))) bool init_proc(void) {
   return true;
 }
 
-// TODO: expose these clears to the net protobuf
+extern void kmem_mb_reset_pages(void);
+
 __attribute__((visibility("default"))) void clear_all() {
   inpcb_timeout(NULL, NULL);
   key_timehandler();
@@ -118,9 +119,12 @@ __attribute__((visibility("default"))) void clear_all() {
   in6_rtqtimo(NULL);
   in_rtqtimo(NULL);
 
-  // TODO(nedwill): nd6_dad_timer
+  // TODO(upstream): nd6_dad_timer
   nstat_idle_check(NULL, NULL);
   domain_timeout(NULL);
+
+  // Reset mbuf page allocator so long fuzzing runs don't exhaust the pool.
+  kmem_mb_reset_pages();
 }
 
 #define MT_DATA 1
@@ -130,7 +134,7 @@ __attribute__((visibility("default"))) struct mbuf* get_mbuf_data(
   struct mbuf* mbuf_data =
       mbuf_create((const uint8_t*)data, size, true, false, MT_DATA, pktflags);
 
-  // TODO(nedwill): consider using a non-loopback interface
+  // TODO(upstream): consider using a non-loopback interface
   // This indicates where the packet came from.
   mbuf_pkthdr_setrcvif((mbuf_t)mbuf_data, lo_ifp);
   return mbuf_data;

@@ -45,7 +45,7 @@ message ConnectX {
   repeated ConnectXFlag flags = 4;
   // user_addr_t iov;
   // unsigned int iovcnt;
-  // TODO(nedwill): support IOV
+  // TODO(upstream): support IOV
   // repeated IOV connectx_iovs = 5;
 }
 
@@ -82,14 +82,18 @@ message SockAddr {
     SockAddr4 sockaddr4 = 2;
     // Legit IPv6 sockaddr
     SockAddr6 sockaddr6 = 3;
-    // TODO(nedwill): Legit UNIX socket
-    // SockAddrUn sockaddrun = 3;
+    // UNIX domain socket
+    SockAddrUn sockaddr_un = 4;
 
-    // TODO(nedwill): sockaddr_ctl, sockaddr_*
+    // TODO(upstream): sockaddr_ctl, sockaddr_*
 
     // Fuzz raw parsing of sockaddrs
     // bytes raw_bytes = 1000;
   }
+}
+
+message SockAddrUn {
+  required bytes sun_path = 1;
 }
 
 message SockAddrGeneric {
@@ -168,12 +172,21 @@ enum Port {
   PORT_0 = 0;
   PORT_1 = 1;
   PORT_2 = 2;
+  PORT_22 = 22;
+  PORT_53 = 53;
+  PORT_80 = 80;
+  PORT_443 = 443;
+  PORT_1023 = 1023;
+  PORT_1024 = 1024;
   PORT_5555 = 5555;
+  PORT_49152 = 49152;
   PORT_65000 = 65000;
+  PORT_65534 = 65534;
+  PORT_65535 = 65535;
 }
 
 // Interface index obtained from if_nametoindex
-// TODO(nedwill): do something more legit here
+// TODO(upstream): do something more legit here
 enum IfIdx {
   IFIDX_CASE_0 = 0;
   IFIDX_CASE_1 = 1;
@@ -221,7 +234,7 @@ message Command {
     Recvmsg recvmsg = 28;
     // RecvmsgNocancel recvmsg_nocancel = 29;
     // RecvmsgX recvmsg_x = 30;
-    // Sendmsg sendmsg = 31;
+    Sendmsg sendmsg = 31;
     // SendmsgNocancel sendmsg_nocancel = 32;
     // SendmsgX sendmsg_x = 33;
     Sendto sendto = 34;
@@ -306,9 +319,10 @@ message Recvmsg {
 // }
 
 message Sendmsg {
-  optional FileDescriptor s = 1;
-  optional bytes msg = 2;
-  optional uint32 flags = 3;
+  required FileDescriptor s = 1;
+  required bytes data = 2;
+  required int32 flags = 3;
+  optional SockAddr to = 4;
 }
 
 // message SendmsgNocancel {
@@ -383,7 +397,7 @@ enum NecpOpenFlag {
   NECP_OPEN_FLAG_PUSH_OBSERVER = 4; // When used with the OBSERVER flag, allows updates to be pushed. Adding clients is not allowed in this mode.
 }
 
-// TODO(nedwill): support null client
+// TODO(upstream): support null client
 enum NecpClientId {
   CLIENT_0 = 0;
   CLIENT_1 = 1;
@@ -393,7 +407,7 @@ enum NecpClientId {
 message NecpClientAction {
   optional FileDescriptor necp_fd = 1;
   optional NecpClientId client_id = 3;
-  // TODO(nedwill): remove these fields
+  // TODO(upstream): remove these fields
   // optional NecpClientActionNumber action = 2;
   // optional bytes buffer = 4;
 
@@ -401,10 +415,10 @@ message NecpClientAction {
     NecpClientActionAdd add = 5;
     NecpClientActionRemove remove = 6;
     NecpClientActionCopyParameters copy_parameters = 7;
-    // TODO(nedwill): implement remaining necp client commands
+    // TODO(upstream): implement remaining necp client commands
     // NECP_CLIENT_ACTION_COPY_RESULT = 8; // Copy client result. Input: client_id; Output: result in buffer
     // NECP_CLIENT_ACTION_COPY_LIST = 9; // Copy all client IDs. Output: struct necp_client_list in buffer
-    // TODO(nedwill): this isn't actually used?
+    // TODO(upstream): this isn't actually used?
     // NecpClientActionRequestNexusInstance request_nexus_instance = 10;
     NecpClientActionAgent agent = 11;
     // NECP_CLIENT_ACTION_COPY_AGENT = 12; // Copy agent content. Input: agent UUID; Output: struct netagent
@@ -416,7 +430,7 @@ message NecpClientAction {
     // NECP_CLIENT_ACTION_UPDATE_CACHE = 18; // Update heuristics and cache
     // NECP_CLIENT_ACTION_COPY_CLIENT_UPDATE = 19; // Fetch an updated client for push-mode observer. Output: Client id, struct necp_client_observer_update in buffer
     // NECP_CLIENT_ACTION_COPY_UPDATED_RESULT = 20; // Copy client result only if changed. Input: client_id; Output: result in buffer
-    // TODO(nedwill): these aren't implemented?
+    // TODO(upstream): these aren't implemented?
     // NECP_CLIENT_ACTION_ADD_FLOW = 21; // Add a flow. Input: client_id; Output: struct necp_client_add_flow
     // NECP_CLIENT_ACTION_REMOVE_FLOW = 22; // Remove a flow. Input: flow_id, optional struct ifnet_stats_per_flow
 
@@ -438,7 +452,7 @@ message NecpClientActionAgent {
 }
 
 message NecpTlv {
-  // TODO(nedwill): make this an enum
+  // TODO(upstream): make this an enum
   optional uint32 necp_type = 1;
   optional bytes data = 2;
 }
@@ -510,6 +524,8 @@ message IoctlReal {
 enum IfrName {
   LO0 = 0;
   STF0 = 1;
+  EN0 = 2;
+  BRIDGE0 = 3;
 }
 
 enum IfruFlag {
@@ -571,43 +587,56 @@ message In6AddrLifetime_64 {
   required uint32 ia6t_pltime = 4;
 }
 
+message UdpHdr {
+  required Port uh_sport = 1;
+  required Port uh_dport = 2;
+  // uh_ulen and uh_sum computed by harness
+}
+
+message UdpPacket {
+  required IpHdr ip_hdr = 1;
+  required UdpHdr udp_hdr = 2;
+  required bytes data = 3;
+}
+
+message Udp6Packet {
+  required Ip6Hdr ip6_hdr = 1;
+  required UdpHdr udp_hdr = 2;
+  required bytes data = 3;
+}
+
+message IcmpHdr {
+  required uint32 icmp_type = 1;
+  required uint32 icmp_code = 2;
+  // icmp_cksum computed by kernel
+  required uint32 icmp_data = 3;  // type-specific data (id+seq or gateway addr)
+}
+
+message Icmp4Packet {
+  required IpHdr ip_hdr = 1;
+  required IcmpHdr icmp_hdr = 2;
+  required bytes data = 3;
+}
+
+message Icmp6Packet {
+  required Ip6Hdr ip6_hdr = 1;
+  required Icmp6Hdr icmp6_hdr = 2;
+  required bytes data = 3;
+}
+
 message Packet {
   oneof packet {
     TcpPacket tcp_packet = 1;
     Tcp6Packet tcp6_packet = 2;
     Ip4Packet ip4_packet = 3;
     Ip6Packet ip6_packet = 4;
-    // TODO(nedwill): more packet types
-    // Stf4Packet,
-    // Udp6Packet,
-    // Rip6Packet,
-    // Icmp6Packet,
-    // Dest6Packet,
-    // Route6Packet,
-    // Frag6Packet,
-    // Ah6Packet,
-    // Esp6Packet,
-    // Ipcomp6Packet,
-    // Encap6Packet,
-    // Gif4Packet,
-    // Gif6Packet,
-    // Udp4Packet,
-    // Rip4Packet,
-    // Icmp4Packet,
-    // Igmp4Packet,
-    // Gre4Packet,
-    // Ah4Packet,
-    // Esp4Packet,
-    // Ipcomp4Packet,
-    // Encap4Packet,
-    // Div4Packet,
-
-    // TODO(nedwill): enable this once other types are finished
+    UdpPacket udp_packet = 5;
+    Udp6Packet udp6_packet = 6;
+    Icmp4Packet icmp4_packet = 7;
+    Icmp6Packet icmp6_packet = 8;
     bytes raw_ip4 = 1000;
     bytes raw_ip6 = 1001;
   }
-  // TODO(nedwill): specify metadata here for layout of mbuf
-
 }
 
 message TcpPacket {
@@ -707,14 +736,15 @@ enum Icmp6Code {
 }
 
 enum TcpSeq {
+  SEQ_0 = 0;
   SEQ_1 = 1;
-  SEQ_2 = 2;
-  SEQ_3 = 3;
-  SEQ_4 = 4;
-  SEQ_5 = 5;
-  SEQ_6 = 6;
-  SEQ_7 = 7;
-  SEQ_8 = 8;
+  SEQ_100 = 100;
+  SEQ_1000 = 1000;
+  SEQ_65535 = 65535;
+  SEQ_HALF = 2147483647;       // 0x7FFFFFFF -- near wraparound
+  SEQ_HALF_PLUS1 = -2147483648; // 0x80000000 -- wraparound boundary
+  SEQ_NEAR_MAX = -256;          // 0xFFFFFF00 -- near max
+  SEQ_MAX = -1;                 // 0xFFFFFFFF -- max uint32
 }
 
 message TcpHdr {
@@ -748,7 +778,7 @@ enum IpVersion {
   IPV6 = 6;
 }
 
-// TODO(nedwill): ip options
+// TODO(upstream): ip options
 message IpHdr {
   required uint32 ip_hl = 1;
   required IpVersion ip_v = 2;
@@ -784,7 +814,7 @@ message Ioctl {
   required FileDescriptor fd = 2;
 }
 
-// TODO(nedwill): review all commented (potentially nondeterministic) ioctls
+// TODO(upstream): review all commented (potentially nondeterministic) ioctls
 // to ensure determinism on each loop with manual cleanup
 enum IoctlIdx {
   SIOCSHIWAT = 1;
@@ -1070,7 +1100,7 @@ enum IoctlIdx {
   DIOCGIFSPEED = 281;
 }
 
-// TODO(nedwill): clean these up, see if more headers have socket options
+// TODO(upstream): clean these up, see if more headers have socket options
 enum SocketOptName {
   option allow_alias = true;
   // socket.h
@@ -1475,17 +1505,45 @@ enum SocketOptName {
   IPV6CTL_MAXID = 51;
 }
 
+message SockOptLinger {
+  required int32 l_onoff = 1;
+  required int32 l_linger = 2;
+}
+
+message SockOptMreq {
+  required InAddr imr_multiaddr = 1;
+  required InAddr imr_interface = 2;
+}
+
+message SockOptInt {
+  required int32 value = 1;
+}
+
+message SockOptTimeval {
+  required int64 tv_sec = 1;
+  required int32 tv_usec = 2;
+}
+
+message SockOptVal {
+  oneof val {
+    bytes raw = 1;
+    SockOptInt int_val = 2;
+    SockOptLinger linger = 3;
+    SockOptMreq mreq = 4;
+    SockOptTimeval timeval = 5;
+  }
+}
+
 message SetSocketOpt {
   optional Protocol level = 1;
   optional SocketOptName name = 2;
-  // TODO(nedwill): structure for val
-  optional bytes val = 3;
+  optional SockOptVal val = 3;
   optional FileDescriptor fd = 4;
 }
 
 // Some pre-allocated file descriptors to make guessing
 // a real file descriptor more likely.
-// TODO(nedwill): do experiments to determine how many of
+// TODO(upstream): do experiments to determine how many of
 // these to use.
 enum FileDescriptor {
   FD_0 = 0;

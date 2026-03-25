@@ -35,21 +35,21 @@
 
 void kheap_startup_init() {}
 
-void zone_view_startup_init() {}
+void zone_view_startup_init(struct zone_view_startup_spec *sp) {}
 
 void lck_attr_startup_init(struct lck_attr_startup_spec *sp) {}
 
-void lck_grp_startup_init() {}
+void lck_grp_startup_init(struct lck_grp_startup_spec *sp) {}
 
 lck_attr_t *lck_attr_alloc_init() { return (void *)1; }
 
-void lck_mtx_assert() {}
+void lck_mtx_assert(lck_mtx_t *lck, unsigned int type) {}
 
-void lck_mtx_init() {}
+void lck_mtx_init(lck_mtx_t *lck, lck_grp_t *grp, lck_attr_t *attr) {}
 
-void lck_mtx_lock() {}
+void lck_mtx_lock(lck_mtx_t *lck) {}
 
-void lck_spin_init() {}
+void lck_spin_init(lck_spin_t *lck, lck_grp_t *grp, lck_attr_t *attr) {}
 
 void lck_rw_startup_init(struct lck_rw_startup_spec *spec) {}
 
@@ -59,37 +59,41 @@ void) {
   return (void*)1;
 }
 
-lck_grp_t       *lck_grp_alloc_init(
-	const char*             grp_name,
-	lck_grp_attr_t  *attr) {
-    return (void*)1;
-  }
+lck_grp_t *lck_grp_alloc_init(
+    const char *grp_name,
+    lck_grp_attr_t *attr) {
+  return (void*)1;
+}
 
-lck_rw_t         *lck_rw_alloc_init(
-	lck_grp_t               *grp,
-	lck_attr_t              *attr) { return (void*)1; }
+lck_rw_t *lck_rw_alloc_init(
+    lck_grp_t *grp,
+    lck_attr_t *attr) {
+  return (void*)1;
+}
 
-lck_mtx_t        *lck_mtx_alloc_init(
-	lck_grp_t               *grp,
-	lck_attr_t              *attr) { return (void*)1; }
+lck_mtx_t *lck_mtx_alloc_init(
+    lck_grp_t *grp,
+    lck_attr_t *attr) {
+  return (void*)1;
+}
 
 lck_spin_t      *lck_spin_alloc_init(
 	lck_grp_t               *grp,
 	lck_attr_t              *attr) { return (void*)1; }
 
-void lck_mtx_lock_spin() {}
+void lck_mtx_lock_spin(lck_mtx_t *lck) {}
 
-void lck_mtx_convert_spin() {}
+void lck_mtx_convert_spin(lck_mtx_t *lck) {}
 
-void lck_mtx_free() {}
+void lck_mtx_free(lck_mtx_t *lck, lck_grp_t *grp) {}
 
-void lck_rw_init() {}
+void lck_rw_init(lck_rw_t *lck, lck_grp_t *grp, lck_attr_t *attr) {}
 
-void lck_mtx_unlock() {}
+void lck_mtx_unlock(lck_mtx_t *lck) {}
 
-void lck_attr_free() {}
+void lck_attr_free(lck_attr_t *attr) {}
 
-void lck_attr_setdebug() {}
+void lck_attr_setdebug(lck_attr_t *attr) {}
 
 OS_OVERLOADABLE
 uint64_t counter_load(unsigned long long **counter) { assert(false); }
@@ -229,3 +233,23 @@ void serverperfmode() { assert(false); }
 void host_statistics_init() { assert(false); }
 
 boolean_t doprnt_hide_pointers = true;
+
+/* Stubs for functions and variables from startup.c (excluded on macOS arm64
+ * build because it includes deeply nested i386 headers with x86 asm).
+ *
+ * kernel_startup_initialize_upto iterates the __DATA,__init_entry_set
+ * section, which is populated by __STARTUP macros in XNU source files.
+ * This is how zones, locks, etc. get created at boot. We call an
+ * external helper (startup_iterate_section) compiled without -nostdinc
+ * that uses getsectdata() to locate and iterate the entries. */
+#include <kern/startup.h>
+
+/* Startup stubs — all no-ops for fuzzer build */
+void kernel_startup_bootstrap(void) {}
+void kernel_and_kext_startup(void *param, int wait_result) {}
+vm_offset_t vm_kernel_addrperm = 0;
+vm_offset_t buf_kernel_addrperm = 0;
+vm_offset_t vm_kernel_addrperm_ext = 0;
+uint64_t vm_kernel_addrhash_salt = 0;
+uint64_t vm_kernel_addrhash_salt_ext = 0;
+/* kevent_debug_flags: now provided by kern_event.c via TUNABLE() macro. */

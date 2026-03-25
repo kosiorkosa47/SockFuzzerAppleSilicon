@@ -26,9 +26,17 @@
  * @APPLE_OSREFERENCE_LICENSE_HEADER_END@
  */
 
-// Unimplemented stub functions
-// These are placeholders that will be replaced with real or fake implementations
-// when the fuzzed code attempts to use them.
+// Unimplemented stub functions.
+//
+// These are placeholders that abort if reached.  They exist because the XNU
+// kernel source references many symbols that are irrelevant to network-stack
+// fuzzing.  When the fuzzer triggers one of these, it means a new code path
+// was reached that needs a real (or faked) implementation.
+//
+// The stubs intentionally lack correct parameter signatures: since they all
+// unconditionally abort, the parameter types are irrelevant.  Adding proper
+// signatures for ~500 XNU-internal functions would be a large maintenance
+// burden with no practical benefit while they remain unreachable.
 
 #include <kern/assert.h>
 #include <stdbool.h>
@@ -37,591 +45,597 @@
 
 int printf(const char* format, ...);
 
+// Convenience macro — logs which stub was hit before aborting.
+// This makes it immediately obvious which unimplemented function
+// the fuzzer reached, so you know what to implement next.
+#define STUB_ABORT(name) \
+  void name() { printf("STUB HIT: " #name "\n"); assert(false); }
+
 __attribute__((visibility("default"))) 
 void Assert(const char* file, int line, const char* expression) {
   printf("%s: assert failed on line %d: %s\n", file, line, expression);
   __builtin_trap();
 }
 
-void IOBSDGetPlatformUUID() { assert(false); }
+STUB_ABORT(IOBSDGetPlatformUUID)
 
-void IOMapperInsertPage() { assert(false); }
+STUB_ABORT(IOMapperInsertPage)
 
-void IOPMCopySleepWakeUUIDKey() { assert(false); }
+STUB_ABORT(IOPMCopySleepWakeUUIDKey)
 
-void IOTaskHasEntitlement() { assert(false); }
+STUB_ABORT(IOTaskHasEntitlement)
 
-void OSMalloc_Tagalloc() { assert(false); }
+STUB_ABORT(OSMalloc_Tagalloc)
 
-void OSMalloc_Tagfree() { assert(false); }
+STUB_ABORT(OSMalloc_Tagfree)
 
-void act_set_astbsd() { assert(false); }
+STUB_ABORT(act_set_astbsd)
 
-void act_set_astkevent() { assert(false); }
+STUB_ABORT(act_set_astkevent)
 
-void addupc_task() { assert(false); }
+STUB_ABORT(addupc_task)
 
-void assert_wait() { assert(false); }
+STUB_ABORT(assert_wait)
 
-void audit_arg_addr() { assert(false); }
+STUB_ABORT(audit_arg_addr)
 
-void audit_arg_cmd() { assert(false); }
+STUB_ABORT(audit_arg_cmd)
 
-void audit_arg_ctlname() { assert(false); }
+STUB_ABORT(audit_arg_ctlname)
 
-void audit_arg_fd() { assert(false); }
+STUB_ABORT(audit_arg_fd)
 
-void audit_arg_file() { assert(false); }
+STUB_ABORT(audit_arg_file)
 
-void audit_arg_pid() { assert(false); }
+STUB_ABORT(audit_arg_pid)
 
-void audit_arg_process() { assert(false); }
+STUB_ABORT(audit_arg_process)
 
-void audit_arg_signum() { assert(false); }
+STUB_ABORT(audit_arg_signum)
 
-void audit_arg_value64() { assert(false); }
+STUB_ABORT(audit_arg_value64)
 
-void audit_syscalls() { assert(false); }
+STUB_ABORT(audit_syscalls)
 
-void bsd_exception() { assert(false); }
+STUB_ABORT(bsd_exception)
 
-void bsd_timeout() { assert(false); }
+STUB_ABORT(bsd_timeout)
 
-void bsdinit_task() { assert(false); }
+STUB_ABORT(bsdinit_task)
 
-void cc_rand_generate() { assert(false); }
+STUB_ABORT(cc_rand_generate)
 
-void check_actforsig() { assert(false); }
+STUB_ABORT(check_actforsig)
 
-void clear_thread_rwlock_boost() { assert(false); }
+STUB_ABORT(clear_thread_rwlock_boost)
 
-void clock_absolutetime_interval_to_deadline() { assert(false); }
+STUB_ABORT(clock_absolutetime_interval_to_deadline)
 
-void clock_continuoustime_interval_to_deadline() { assert(false); }
+STUB_ABORT(clock_continuoustime_interval_to_deadline)
 
-void clock_deadline_for_periodic_event() { assert(false); }
+STUB_ABORT(clock_deadline_for_periodic_event)
 
-void clock_get_calendar_microtime() { assert(false); }
+STUB_ABORT(clock_get_calendar_microtime)
 
-void clock_get_calendar_nanotime() { assert(false); }
+STUB_ABORT(clock_get_calendar_nanotime)
 
-void clock_get_uptime() { assert(false); }
+STUB_ABORT(clock_get_uptime)
 
-void coalition_get_leader() { assert(false); }
+STUB_ABORT(coalition_get_leader)
 
-void coalition_is_leader() { assert(false); }
+STUB_ABORT(coalition_is_leader)
 
-void copyin_word() { assert(false); }
+STUB_ABORT(copyin_word)
 
-void copyinstr() { assert(false); }
+STUB_ABORT(copyinstr)
 
-void copypv() { assert(false); }
+STUB_ABORT(copypv)
 
-void copywithin() { assert(false); }
+STUB_ABORT(copywithin)
 
-void coredump() { assert(false); }
+STUB_ABORT(coredump)
 
-void cs_identity_get() { assert(false); }
+STUB_ABORT(cs_identity_get)
 
-void current_task() { assert(false); }
+STUB_ABORT(current_task)
 
-void deflate() { assert(false); }
+STUB_ABORT(deflate)
 
-void deflateReset() { assert(false); }
+STUB_ABORT(deflateReset)
 
-void enodev() { assert(false); }
+STUB_ABORT(enodev)
 
-void enodev_strat() { assert(false); }
+STUB_ABORT(enodev_strat)
 
-void exit_with_reason() { assert(false); }
+STUB_ABORT(exit_with_reason)
 
-void fs_filtops() { assert(false); }
+STUB_ABORT(fs_filtops)
 
-void fsevent_filtops() { assert(false); }
+STUB_ABORT(fsevent_filtops)
 
-void fuulong() { assert(false); }
+STUB_ABORT(fuulong)
 
-void gPEClockFrequencyInfo() { assert(false); }
+STUB_ABORT(gPEClockFrequencyInfo)
 
 void* g_crypto_funcs = NULL;
 
-void get_bsdtask_info() { assert(false); }
+STUB_ABORT(get_bsdtask_info)
 
-void get_bsdthreadtask_info() { assert(false); }
+STUB_ABORT(get_bsdthreadtask_info)
 
-void get_signalact() { assert(false); }
+STUB_ABORT(get_signalact)
 
-void get_threadtask() { assert(false); }
+STUB_ABORT(get_threadtask)
 
-void get_useraddr() { assert(false); }
+STUB_ABORT(get_useraddr)
 
-void hashaddr() { assert(false); }
+STUB_ABORT(hashaddr)
 
-void hashbacktrace() { assert(false); }
+STUB_ABORT(hashbacktrace)
 
-void hostname() { assert(false); }
+STUB_ABORT(hostname)
 
-void hz() { assert(false); }
+STUB_ABORT(hz)
 
-void inflate() { assert(false); }
+STUB_ABORT(inflate)
 
-void inflateReset() { assert(false); }
+STUB_ABORT(inflateReset)
 
-void initproc() { assert(false); }
+STUB_ABORT(initproc)
 
-void ipc_entry_name_mask() { assert(false); }
+STUB_ABORT(ipc_entry_name_mask)
 
-void is_kerneltask() { assert(false); }
+STUB_ABORT(is_kerneltask)
 
-void itimerdecr() { assert(false); }
+STUB_ABORT(itimerdecr)
 
-void itimerfix() { assert(false); }
+STUB_ABORT(itimerfix)
 
-void kauth_authorize_generic() { assert(false); }
+STUB_ABORT(kauth_authorize_generic)
 
-void kauth_cred_getgid() { assert(false); }
+STUB_ABORT(kauth_cred_getgid)
 
-void kauth_cred_getruid() { assert(false); }
+STUB_ABORT(kauth_cred_getruid)
 
-void kauth_cred_getsvuid() { assert(false); }
+STUB_ABORT(kauth_cred_getsvuid)
 
-void kauth_getruid() { assert(false); }
+STUB_ABORT(kauth_getruid)
 
-void kcdata_estimate_required_buffer_size() { assert(false); }
+STUB_ABORT(kcdata_estimate_required_buffer_size)
 
-void kcdata_get_memory_addr() { assert(false); }
+STUB_ABORT(kcdata_get_memory_addr)
 
-void kcdata_memcpy() { assert(false); }
+STUB_ABORT(kcdata_memcpy)
 
-void kcdata_memory_static_init() { assert(false); }
+STUB_ABORT(kcdata_memory_static_init)
 
-void kdp_get_interface() { assert(false); }
+STUB_ABORT(kdp_get_interface)
 
-void kdp_is_in_zone() { assert(false); }
+STUB_ABORT(kdp_is_in_zone)
 
-void kdp_set_gateway_mac() { assert(false); }
+STUB_ABORT(kdp_set_gateway_mac)
 
-void kdp_set_ip_and_mac_addresses() { assert(false); }
+STUB_ABORT(kdp_set_ip_and_mac_addresses)
 
-void kernel_debug_filtered() { assert(false); }
+STUB_ABORT(kernel_debug_filtered)
 
-void kernel_task() { assert(false); }
+STUB_ABORT(kernel_task)
 
-void launchd_exit_reason_get_string_desc() { assert(false); }
+STUB_ABORT(launchd_exit_reason_get_string_desc)
 
-void lck_mtx_lock_spin_always() { assert(false); }
+STUB_ABORT(lck_mtx_lock_spin_always)
 
-void lck_rw_destroy() { assert(false); }
+STUB_ABORT(lck_rw_destroy)
 
-void lck_rw_lock_exclusive_to_shared() { assert(false); }
+STUB_ABORT(lck_rw_lock_exclusive_to_shared)
 
-void lck_rw_lock_shared_to_exclusive() { assert(false); }
+STUB_ABORT(lck_rw_lock_shared_to_exclusive)
 
-void lck_rw_sleep() { assert(false); }
+STUB_ABORT(lck_rw_sleep)
 
-void lck_spin_assert() { assert(false); }
+STUB_ABORT(lck_spin_assert)
 
-void lck_spin_destroy() { assert(false); }
+STUB_ABORT(lck_spin_destroy)
 
-void ledger_get_task_entry_info_multiple() { assert(false); }
+STUB_ABORT(ledger_get_task_entry_info_multiple)
 
-void ledger_info() { assert(false); }
+STUB_ABORT(ledger_info)
 
-void ledger_template_info() { assert(false); }
+STUB_ABORT(ledger_template_info)
 
-void mac_error_select() { assert(false); }
+STUB_ABORT(mac_error_select)
 
-void mac_policy_list() { assert(false); }
+STUB_ABORT(mac_policy_list)
 
-void mac_policy_list_conditional_busy() { assert(false); }
+STUB_ABORT(mac_policy_list_conditional_busy)
 
-void mac_policy_list_unbusy() { assert(false); }
+STUB_ABORT(mac_policy_list_unbusy)
 
-void mac_proc_check_ledger() { assert(false); }
+STUB_ABORT(mac_proc_check_ledger)
 
-void mac_proc_check_signal() { assert(false); }
+STUB_ABORT(mac_proc_check_signal)
 
-void mac_socket_check_received() { assert(false); }
+STUB_ABORT(mac_socket_check_received)
 
-void mac_socket_check_stat() { assert(false); }
+STUB_ABORT(mac_socket_check_stat)
 
-void mac_system_enforce() { assert(false); }
+STUB_ABORT(mac_system_enforce)
 
-void mach_absolutetime_asleep() { assert(false); }
+STUB_ABORT(mach_absolutetime_asleep)
 
-void machport_filtops() { assert(false); }
+STUB_ABORT(machport_filtops)
 
-void max_mem() { assert(false); }
+STUB_ABORT(max_mem)
 
-void mb_map() { assert(false); }
+STUB_ABORT(mb_map)
 
-void memorystatus_filtops() { assert(false); }
+STUB_ABORT(memorystatus_filtops)
 
-void memorystatus_kevent_init() { assert(false); }
+STUB_ABORT(memorystatus_kevent_init)
 
-void msleep() { assert(false); }
+STUB_ABORT(msleep)
 
-void msleep0() { assert(false); }
+STUB_ABORT(msleep0)
 
-void msleep1() { assert(false); }
+STUB_ABORT(msleep1)
 
-void nanoseconds_to_absolutetime() { assert(false); }
+STUB_ABORT(nanoseconds_to_absolutetime)
 
-void nanotime() { assert(false); }
+STUB_ABORT(nanotime)
 
-void pg_rele() { assert(false); }
+STUB_ABORT(pg_rele)
 
-void pgfind() { assert(false); }
+STUB_ABORT(pgfind)
 
-void pgrp_iterate() { assert(false); }
+STUB_ABORT(pgrp_iterate)
 
-void port_name_to_thread() { assert(false); }
+STUB_ABORT(port_name_to_thread)
 
-void proc_get_effective_task_policy() { assert(false); }
+STUB_ABORT(proc_get_effective_task_policy)
 
-void proc_getcdhash() { assert(false); }
+STUB_ABORT(proc_getcdhash)
 
-void proc_iterate() { assert(false); }
+STUB_ABORT(proc_iterate)
 
-void proc_klist_lock() { assert(false); }
+STUB_ABORT(proc_klist_lock)
 
-void proc_klist_unlock() { assert(false); }
+STUB_ABORT(proc_klist_unlock)
 
-void proc_knote() { assert(false); }
+STUB_ABORT(proc_knote)
 
-void proc_list_lock() { assert(false); }
+STUB_ABORT(proc_list_lock)
 
-void proc_list_unlock() { assert(false); }
+STUB_ABORT(proc_list_unlock)
 
-void proc_lock() { assert(false); }
+STUB_ABORT(proc_lock)
 
-void proc_log_32bit_telemetry() { assert(false); }
+STUB_ABORT(proc_log_32bit_telemetry)
 
-void proc_name_address() { assert(false); }
+STUB_ABORT(proc_name_address)
 
-void proc_parentdropref() { assert(false); }
+STUB_ABORT(proc_parentdropref)
 
-void proc_parentholdref() { assert(false); }
+STUB_ABORT(proc_parentholdref)
 
-void proc_pgrp() { assert(false); }
+STUB_ABORT(proc_pgrp)
 
-void proc_self() { assert(false); }
+STUB_ABORT(proc_self)
 
-void proc_set_thread_policy() { assert(false); }
+STUB_ABORT(proc_set_thread_policy)
 
-void proc_signal() { assert(false); }
+STUB_ABORT(proc_signal)
 
-void proc_spinlock() { assert(false); }
+STUB_ABORT(proc_spinlock)
 
-void proc_spinunlock() { assert(false); }
+STUB_ABORT(proc_spinunlock)
 
-void proc_unlock() { assert(false); }
+STUB_ABORT(proc_unlock)
 
-void proc_uuid_policy_kernel() { assert(false); }
+STUB_ABORT(proc_uuid_policy_kernel)
 
-void proc_uuid_policy_lookup() { assert(false); }
+STUB_ABORT(proc_uuid_policy_lookup)
 
-void pthread_functions() { assert(false); }
+STUB_ABORT(pthread_functions)
 
-void pthread_priority_canonicalize() { assert(false); }
+STUB_ABORT(pthread_priority_canonicalize)
 
-void ptmx_kqops() { assert(false); }
+STUB_ABORT(ptmx_kqops)
 
-void ptsd_kqops() { assert(false); }
+STUB_ABORT(ptsd_kqops)
 
-void pzfind() { assert(false); }
+STUB_ABORT(pzfind)
 
-void sane_size() { assert(false); }
+STUB_ABORT(sane_size)
 
-void securelevel() { assert(false); }
+STUB_ABORT(securelevel)
 
-void semaphore_timedwait_signal_trap_internal() { assert(false); }
+STUB_ABORT(semaphore_timedwait_signal_trap_internal)
 
-void semaphore_timedwait_trap_internal() { assert(false); }
+STUB_ABORT(semaphore_timedwait_trap_internal)
 
-void semaphore_wait_signal_trap_internal() { assert(false); }
+STUB_ABORT(semaphore_wait_signal_trap_internal)
 
-void semaphore_wait_trap_internal() { assert(false); }
+STUB_ABORT(semaphore_wait_trap_internal)
 
-void sendsig() { assert(false); }
+STUB_ABORT(sendsig)
 
-void set_thread_rwlock_boost() { assert(false); }
+STUB_ABORT(set_thread_rwlock_boost)
 
-void spec_filtops() { assert(false); }
+STUB_ABORT(spec_filtops)
 
-void subyte() { assert(false); }
+STUB_ABORT(subyte)
 
-void suulong() { assert(false); }
+STUB_ABORT(suulong)
 
-void sysctl__debug_children() { assert(false); }
+STUB_ABORT(sysctl__debug_children)
 
-void sysctl__kern_children() { assert(false); }
+STUB_ABORT(sysctl__kern_children)
 
-void sysctl__net_children() { assert(false); }
+STUB_ABORT(sysctl__net_children)
 
-void sysctl__net_link_generic_system_children() { assert(false); }
+STUB_ABORT(sysctl__net_link_generic_system_children)
 
-void sysctl__sysctl_children() { assert(false); }
+STUB_ABORT(sysctl__sysctl_children)
 
-void task_consume_32bit_log_flag() { assert(false); }
+STUB_ABORT(task_consume_32bit_log_flag)
 
-void task_deallocate() { assert(false); }
+STUB_ABORT(task_deallocate)
 
-void task_did_exec() { assert(false); }
+STUB_ABORT(task_did_exec)
 
-void task_hold() { assert(false); }
+STUB_ABORT(task_hold)
 
-void task_is_active() { assert(false); }
+STUB_ABORT(task_is_active)
 
-void task_is_exec_copy() { assert(false); }
+STUB_ABORT(task_is_exec_copy)
 
-void task_is_halting() { assert(false); }
+STUB_ABORT(task_is_halting)
 
-void task_release() { assert(false); }
+STUB_ABORT(task_release)
 
-void task_resume_internal() { assert(false); }
+STUB_ABORT(task_resume_internal)
 
-void task_suspend_internal() { assert(false); }
+STUB_ABORT(task_suspend_internal)
 
-void task_vtimer_clear() { assert(false); }
+STUB_ABORT(task_vtimer_clear)
 
-void task_vtimer_set() { assert(false); }
+STUB_ABORT(task_vtimer_set)
 
-void task_vtimer_update() { assert(false); }
+STUB_ABORT(task_vtimer_update)
 
-void task_wait() { assert(false); }
+STUB_ABORT(task_wait)
 
-void telemetry_timer_event() { assert(false); }
+STUB_ABORT(telemetry_timer_event)
 
-void thread_add_ipc_override() { assert(false); }
+STUB_ABORT(thread_add_ipc_override)
 
-void thread_add_sync_ipc_override() { assert(false); }
+STUB_ABORT(thread_add_sync_ipc_override)
 
-void thread_block() { assert(false); }
+STUB_ABORT(thread_block)
 
-void thread_block_parameter() { assert(false); }
+STUB_ABORT(thread_block_parameter)
 
-void thread_call_cancel() { assert(false); }
+STUB_ABORT(thread_call_cancel)
 
-void thread_call_cancel_wait() { assert(false); }
+STUB_ABORT(thread_call_cancel_wait)
 
-void thread_call_enter() { assert(false); }
+STUB_ABORT(thread_call_enter)
 
-void thread_call_free() { assert(false); }
+STUB_ABORT(thread_call_free)
 
-void thread_call_func_cancel() { assert(false); }
+STUB_ABORT(thread_call_func_cancel)
 
-void thread_call_func_delayed() { assert(false); }
+STUB_ABORT(thread_call_func_delayed)
 
-void thread_call_isactive() { assert(false); }
+STUB_ABORT(thread_call_isactive)
 
-void thread_drop_ipc_override() { assert(false); }
+STUB_ABORT(thread_drop_ipc_override)
 
-void thread_drop_sync_ipc_override() { assert(false); }
+STUB_ABORT(thread_drop_sync_ipc_override)
 
-void thread_ends_owning_workloop() { assert(false); }
+STUB_ABORT(thread_ends_owning_workloop)
 
-void thread_get_ipc_override() { assert(false); }
+STUB_ABORT(thread_get_ipc_override)
 
-void thread_get_tag() { assert(false); }
+STUB_ABORT(thread_get_tag)
 
-void thread_handoff() { assert(false); }
+STUB_ABORT(thread_handoff)
 
-void thread_owned_workloops_count() { assert(false); }
+STUB_ABORT(thread_owned_workloops_count)
 
-void thread_qos_from_pthread_priority() { assert(false); }
+STUB_ABORT(thread_qos_from_pthread_priority)
 
-void thread_reference() { assert(false); }
+STUB_ABORT(thread_reference)
 
-void thread_rettokern_addr() { assert(false); }
+STUB_ABORT(thread_rettokern_addr)
 
-void thread_set_pending_block_hint() { assert(false); }
+STUB_ABORT(thread_set_pending_block_hint)
 
-void thread_set_thread_name() { assert(false); }
+STUB_ABORT(thread_set_thread_name)
 
-void thread_set_voucher_name() { assert(false); }
+STUB_ABORT(thread_set_voucher_name)
 
-void thread_should_abort() { assert(false); }
+STUB_ABORT(thread_should_abort)
 
-void thread_should_halt() { assert(false); }
+STUB_ABORT(thread_should_halt)
 
-void thread_starts_owning_workloop() { assert(false); }
+STUB_ABORT(thread_starts_owning_workloop)
 
-void thread_tid() { assert(false); }
+STUB_ABORT(thread_tid)
 
-void thread_update_ipc_override() { assert(false); }
+STUB_ABORT(thread_update_ipc_override)
 
-void thread_wakeup_thread() { assert(false); }
+STUB_ABORT(thread_wakeup_thread)
 
-void tick() { assert(false); }
+STUB_ABORT(tick)
 
-void timeout_with_leeway() { assert(false); }
+STUB_ABORT(timeout_with_leeway)
 
-void timespec_is_valid() { assert(false); }
+STUB_ABORT(timespec_is_valid)
 
-void tsleep() { assert(false); }
+STUB_ABORT(tsleep)
 
-void tsleep0() { assert(false); }
+STUB_ABORT(tsleep0)
 
-void tsleep1() { assert(false); }
+STUB_ABORT(tsleep1)
 
-void tstoabstime() { assert(false); }
+STUB_ABORT(tstoabstime)
 
-void tty_filtops() { assert(false); }
+STUB_ABORT(tty_filtops)
 
-void tty_pgrp() { assert(false); }
+STUB_ABORT(tty_pgrp)
 
-void tvtoabstime() { assert(false); }
+STUB_ABORT(tvtoabstime)
 
-void unix_syscall_return() { assert(false); }
+STUB_ABORT(unix_syscall_return)
 
-void untimeout() { assert(false); }
+STUB_ABORT(untimeout)
 
-void vaddlog() { assert(false); }
+STUB_ABORT(vaddlog)
 
-void vfs_context_create() { assert(false); }
+STUB_ABORT(vfs_context_create)
 
-void vfs_context_rele() { assert(false); }
+STUB_ABORT(vfs_context_rele)
 
-void vm_kernel_slid_base() { assert(false); }
+STUB_ABORT(vm_kernel_slid_base)
 
-void vm_kernel_slid_top() { assert(false); }
+STUB_ABORT(vm_kernel_slid_top)
 
-void vm_kernel_slide() { assert(false); }
+STUB_ABORT(vm_kernel_slide)
 
-void vn_stat() { assert(false); }
+STUB_ABORT(vn_stat)
 
-void vnode_filtops() { assert(false); }
+STUB_ABORT(vnode_filtops)
 
-void vnode_isfifo() { assert(false); }
+STUB_ABORT(vnode_isfifo)
 
-void waitq_assert_wait64() { assert(false); }
+STUB_ABORT(waitq_assert_wait64)
 
-void waitq_assert_wait64_leeway() { assert(false); }
+STUB_ABORT(waitq_assert_wait64_leeway)
 
-void waitq_clear_prepost() { assert(false); }
+STUB_ABORT(waitq_clear_prepost)
 
-void waitq_deinit() { assert(false); }
+STUB_ABORT(waitq_deinit)
 
-void waitq_get_prepost_id() { assert(false); }
+STUB_ABORT(waitq_get_prepost_id)
 
-void waitq_init() { assert(false); }
+STUB_ABORT(waitq_init)
 
-void waitq_is_valid() { assert(false); }
+STUB_ABORT(waitq_is_valid)
 
-void waitq_link() { assert(false); }
+STUB_ABORT(waitq_link)
 
-void waitq_link_release() { assert(false); }
+STUB_ABORT(waitq_link_release)
 
-void waitq_link_reserve() { assert(false); }
+STUB_ABORT(waitq_link_reserve)
 
-void waitq_set_alloc() { assert(false); }
+STUB_ABORT(waitq_set_alloc)
 
-void waitq_set_clear_preposts() { assert(false); }
+STUB_ABORT(waitq_set_clear_preposts)
 
-void waitq_set_deinit() { assert(false); }
+STUB_ABORT(waitq_set_deinit)
 
-void waitq_set_init() { assert(false); }
+STUB_ABORT(waitq_set_init)
 
-void waitq_set_is_valid() { assert(false); }
+STUB_ABORT(waitq_set_is_valid)
 
-void waitq_set_unlink_all() { assert(false); }
+STUB_ABORT(waitq_set_unlink_all)
 
-void waitq_unlink() { assert(false); }
+STUB_ABORT(waitq_unlink)
 
-void waitq_unlink_by_prepost_id() { assert(false); }
+STUB_ABORT(waitq_unlink_by_prepost_id)
 
-void waitq_wakeup64_all() { assert(false); }
+STUB_ABORT(waitq_wakeup64_all)
 
-void waitq_wakeup64_one() { assert(false); }
+STUB_ABORT(waitq_wakeup64_one)
 
-void wqset_id() { assert(false); }
+STUB_ABORT(wqset_id)
 
-void wqset_waitq() { assert(false); }
+STUB_ABORT(wqset_waitq)
 
-void zalloc_canblock() { assert(false); }
+STUB_ABORT(zalloc_canblock)
 
-void zfill() { assert(false); }
+STUB_ABORT(zfill)
 
-void kernel_pmap() { assert(false); }
+STUB_ABORT(kernel_pmap)
 
-void kmem_free() { assert(false); }
+STUB_ABORT(kmem_free)
 
-void cru2x() { assert(false); }
+STUB_ABORT(cru2x)
 
-void mac_vnode_check_create() { assert(false); }
+STUB_ABORT(mac_vnode_check_create)
 
-void mac_vnode_check_uipc_bind() { assert(false); }
+STUB_ABORT(mac_vnode_check_uipc_bind)
 
-void mac_vnode_check_uipc_connect() { assert(false); }
+STUB_ABORT(mac_vnode_check_uipc_connect)
 
-void namei() { assert(false); }
+STUB_ABORT(namei)
 
-void nameidone() { assert(false); }
+STUB_ABORT(nameidone)
 
-void vfs_context_ucred() { assert(false); }
+STUB_ABORT(vfs_context_ucred)
 
-void vn_create() { assert(false); }
+STUB_ABORT(vn_create)
 
-void vnode_authorize() { assert(false); }
+STUB_ABORT(vnode_authorize)
 
-void vnode_put() { assert(false); }
+STUB_ABORT(vnode_put)
 
-void vnode_ref() { assert(false); }
+STUB_ABORT(vnode_ref)
 
-void vnode_rele() { assert(false); }
+STUB_ABORT(vnode_rele)
 
-void audit_arg_sockaddr() { assert(false); }
+STUB_ABORT(audit_arg_sockaddr)
 
-void audit_arg_socket() { assert(false); }
+STUB_ABORT(audit_arg_socket)
 
-void audit_arg_value32() { assert(false); }
+STUB_ABORT(audit_arg_value32)
 
-void vfs_context_cwd() { assert(false); }
+STUB_ABORT(vfs_context_cwd)
 
-void vnode_isreg() { assert(false); }
+STUB_ABORT(vnode_isreg)
 
-void vnode_size() { assert(false); }
+STUB_ABORT(vnode_size)
 
-void aes_decrypt_aad_gcm() { assert(false); }
+STUB_ABORT(aes_decrypt_aad_gcm)
 
-void aes_decrypt_cbc() { assert(false); }
+STUB_ABORT(aes_decrypt_cbc)
 
-void aes_decrypt_finalize_gcm() { assert(false); }
+STUB_ABORT(aes_decrypt_finalize_gcm)
 
-void aes_decrypt_gcm() { assert(false); }
+STUB_ABORT(aes_decrypt_gcm)
 
-void aes_decrypt_get_ctx_size_gcm() { assert(false); }
+STUB_ABORT(aes_decrypt_get_ctx_size_gcm)
 
-void aes_decrypt_key() { assert(false); }
+STUB_ABORT(aes_decrypt_key)
 
-void aes_decrypt_key_gcm() { assert(false); }
+STUB_ABORT(aes_decrypt_key_gcm)
 
-void aes_decrypt_set_iv_gcm() { assert(false); }
+STUB_ABORT(aes_decrypt_set_iv_gcm)
 
-void aes_encrypt_aad_gcm() { assert(false); }
+STUB_ABORT(aes_encrypt_aad_gcm)
 
-void aes_encrypt_cbc() { assert(false); }
+STUB_ABORT(aes_encrypt_cbc)
 
-void aes_encrypt_finalize_gcm() { assert(false); }
+STUB_ABORT(aes_encrypt_finalize_gcm)
 
-void aes_encrypt_gcm() { assert(false); }
+STUB_ABORT(aes_encrypt_gcm)
 
-void aes_encrypt_get_ctx_size_gcm() { assert(false); }
+STUB_ABORT(aes_encrypt_get_ctx_size_gcm)
 
-void aes_encrypt_inc_iv_gcm() { assert(false); }
+STUB_ABORT(aes_encrypt_inc_iv_gcm)
 
-void aes_encrypt_key() { assert(false); }
+STUB_ABORT(aes_encrypt_key)
 
-void aes_encrypt_key_with_iv_gcm() { assert(false); }
+STUB_ABORT(aes_encrypt_key_with_iv_gcm)
 
-void aes_encrypt_reset_gcm() { assert(false); }
+STUB_ABORT(aes_encrypt_reset_gcm)
 
-void clock_get_system_microtime() { assert(false); }
+STUB_ABORT(clock_get_system_microtime)
 
-void thread_call_enter1_delayed() { assert(false); }
+STUB_ABORT(thread_call_enter1_delayed)
 
-void panic() { assert(false); }
+STUB_ABORT(panic)
 
 struct os_log_s {
   int a;
@@ -635,278 +649,246 @@ uint32_t net_flowhash_mh3_x86_32(const void* key, uint32_t len,
   return 1;
 }
 
-void cc_clear() { assert(false); }
+STUB_ABORT(cc_clear)
 
-void cc_cmp_safe() { assert(false); }
+STUB_ABORT(cc_cmp_safe)
 
-void getsectdatafromheader() { assert(false); }
+STUB_ABORT(getsectdatafromheader)
 
-void _mh_execute_header() { assert(false); }
+/* On macOS, _mh_execute_header is provided by the linker automatically. */
+#ifndef __APPLE__
+STUB_ABORT(_mh_execute_header)
+#endif
 
-void net_flowhash() { assert(false); }
+STUB_ABORT(net_flowhash)
 
-void os_cpu_in_cksum() { assert(false); }
+STUB_ABORT(os_cpu_in_cksum)
 
-void os_cpu_in_cksum_mbuf() { assert(false); }
+STUB_ABORT(os_cpu_in_cksum_mbuf)
 
-void proc_name() { assert(false); }
+STUB_ABORT(proc_name)
 
-void thread_terminate() { assert(false); }
+STUB_ABORT(thread_terminate)
 
-void uuid_generate() { assert(false); }
+STUB_ABORT(uuid_generate)
 
-void uuid_parse() { assert(false); }
+STUB_ABORT(uuid_parse)
 
-void _pthread_priority_normalize() { assert(false); }
+STUB_ABORT(_pthread_priority_normalize)
 
-void workq_kern_threadreq_modify() { assert(false); }
+STUB_ABORT(workq_kern_threadreq_modify)
 
-void nat464_translate_proto() { assert(false); }
+STUB_ABORT(nat464_translate_proto)
 
-void turnstile_cleanup() { assert(false); }
+STUB_ABORT(turnstile_cleanup)
 
-void thread_wakeup_prim() { assert(false); }
+STUB_ABORT(thread_wakeup_prim)
 
-void waitq_wakeup64_thread() { assert(false); }
+STUB_ABORT(waitq_wakeup64_thread)
 
-void turnstile_prepare() { assert(false); }
+STUB_ABORT(turnstile_prepare)
 
-void assert_wait_deadline() { assert(false); }
+STUB_ABORT(assert_wait_deadline)
 
-void nat464_synthesize_ipv4() { assert(false); }
+STUB_ABORT(nat464_synthesize_ipv4)
 
-void clat_debug() { assert(false); }
+STUB_ABORT(clat_debug)
 
-void workq_kern_threadreq_redrive() { assert(false); }
+STUB_ABORT(workq_kern_threadreq_redrive)
 
-void zdestroy() { assert(false); }
+STUB_ABORT(zdestroy)
 
-void turnstile_update_inheritor() { assert(false); }
+STUB_ABORT(turnstile_update_inheritor)
 
-void thread_handoff_parameter() { assert(false); }
+STUB_ABORT(thread_handoff_parameter)
 
-void in6_clat46_eventhdlr_callback() { assert(false); }
+STUB_ABORT(in6_clat46_eventhdlr_callback)
 
-void turnstile_update_inheritor_complete() { assert(false); }
+STUB_ABORT(turnstile_update_inheritor_complete)
 
-void nat464_insert_frag46() { assert(false); }
+STUB_ABORT(nat464_insert_frag46)
 
-void nat464_synthesize_ipv6() { assert(false); }
+STUB_ABORT(nat464_synthesize_ipv6)
 
-void turnstile_complete() { assert(false); }
+STUB_ABORT(turnstile_complete)
 
-void nat464_translate_64() { assert(false); }
+STUB_ABORT(nat464_translate_64)
 
-void waitq_set_should_lazy_init_link() { assert(false); }
+STUB_ABORT(waitq_set_should_lazy_init_link)
 
-void workq_is_exiting() { assert(false); }
+STUB_ABORT(workq_is_exiting)
 
-void sysctl_helper_waitq_set_nelem() { assert(false); }
+STUB_ABORT(sysctl_helper_waitq_set_nelem)
 
-void turnstile_alloc() { assert(false); }
+STUB_ABORT(turnstile_alloc)
 
-void workq_kern_threadreq_update_inheritor() { assert(false); }
+STUB_ABORT(workq_kern_threadreq_update_inheritor)
 
-void thread_handoff_deallocate() { assert(false); }
+STUB_ABORT(thread_handoff_deallocate)
 
-void workq_kern_threadreq_unlock() { assert(false); }
+STUB_ABORT(workq_kern_threadreq_unlock)
 
-void telemetry_pmi_setup() { assert(false); }
+STUB_ABORT(telemetry_pmi_setup)
 
-void nat464_translate_46() { assert(false); }
+STUB_ABORT(nat464_translate_46)
 
-void waitq_set_lazy_init_link() { assert(false); }
+STUB_ABORT(waitq_set_lazy_init_link)
 
-void workq_thread_set_max_qos() { assert(false); }
+STUB_ABORT(workq_thread_set_max_qos)
 
-void workq_kern_threadreq_lock() { assert(false); }
+STUB_ABORT(workq_kern_threadreq_lock)
 
-void nat464_cksum_fixup() { assert(false); }
+STUB_ABORT(nat464_cksum_fixup)
 
-void turnstile_deallocate() { assert(false); }
+STUB_ABORT(turnstile_deallocate)
 
-void in6_clat46_event_enqueue_nwk_wq_entry() { assert(false); }
+STUB_ABORT(in6_clat46_event_enqueue_nwk_wq_entry)
 
-void workq_kern_threadreq_initiate() { assert(false); }
+STUB_ABORT(workq_kern_threadreq_initiate)
 
-void turnstile_reference() { assert(false); }
+STUB_ABORT(turnstile_reference)
 
-void _pthread_priority_combine() { assert(false); }
+STUB_ABORT(_pthread_priority_combine)
 
-void cchmac_final() { assert(false); }
+STUB_ABORT(cchmac_final)
 
-void thread_update_kevent_override() { assert(false); }
+STUB_ABORT(thread_update_kevent_override)
 
-void thread_add_kevent_override() { assert(false); }
+STUB_ABORT(thread_add_kevent_override)
 
-void _disable_preemption() { assert(false); }
+STUB_ABORT(_disable_preemption)
 
-void lck_spin_sleep_with_inheritor() { assert(false); }
+STUB_ABORT(lck_spin_sleep_with_inheritor)
 
-void ccsha256_di() { assert(false); }
+STUB_ABORT(ccsha256_di)
 
-void copysize_limit_panic() { assert(false); }
+STUB_ABORT(copysize_limit_panic)
 
-void sysctl_load_devicetree_entries() { assert(false); }
+STUB_ABORT(sysctl_load_devicetree_entries)
 
-void mpsc_test_pingpong() { assert(false); }
+STUB_ABORT(mpsc_test_pingpong)
 
-void sysctl_task_get_no_smt() { assert(false); }
+STUB_ABORT(sysctl_task_get_no_smt)
 
-void hostname_lock() { assert(false); }
+STUB_ABORT(hostname_lock)
 
-void cchmac_update() { assert(false); }
+STUB_ABORT(cchmac_update)
 
-void _os_log_internal_driverKit() { assert(false); }
+STUB_ABORT(_os_log_internal_driverKit)
 
-void machine_tecs() { assert(false); }
+STUB_ABORT(machine_tecs)
 
-void machine_csv() { assert(false); }
+STUB_ABORT(machine_csv)
 
-void act_clear_astkevent() { assert(false); }
+STUB_ABORT(act_clear_astkevent)
 
-void cchmac_init() { assert(false); }
+STUB_ABORT(cchmac_init)
 
-void thread_drop_servicer_override() { assert(false); }
+STUB_ABORT(thread_drop_servicer_override)
 
-void thread_update_servicer_override() { assert(false); }
+STUB_ABORT(thread_update_servicer_override)
 
-void wakeup_one_with_inheritor() { assert(false); }
+STUB_ABORT(wakeup_one_with_inheritor)
 
-void sysctl__machdep_children() { assert(false); }
+STUB_ABORT(sysctl__machdep_children)
 
-void thread_unfreeze_base_pri() { assert(false); }
+STUB_ABORT(thread_unfreeze_base_pri)
 
-void turnstile_deallocate_safe() { assert(false); }
+STUB_ABORT(turnstile_deallocate_safe)
 
-void task_exc_guard_default() { assert(false); }
+STUB_ABORT(task_exc_guard_default)
 
-void sysctl_task_set_no_smt() { assert(false); }
+STUB_ABORT(sysctl_task_set_no_smt)
 
-void current_uthread() { assert(false); }
+STUB_ABORT(current_uthread)
 
-void filt_wldetach_sync_ipc() { assert(false); }
+STUB_ABORT(filt_wldetach_sync_ipc)
 
-void _enable_preemption() { assert(false); }
+STUB_ABORT(_enable_preemption)
 
-void restricted_port_bitmap() { assert(false); }
+STUB_ABORT(restricted_port_bitmap)
 
-void cfil_crypto_sign_data() { assert(false); }
+STUB_ABORT(cfil_crypto_sign_data)
 
-void thread_set_no_smt() { assert(false); }
+STUB_ABORT(thread_set_no_smt)
 
-void net_mpklog_enabled() { assert(false); }
+STUB_ABORT(net_mpklog_enabled)
 
-void cfil_crypto_init_client() { assert(false); }
+STUB_ABORT(cfil_crypto_init_client)
 
-void task_info() { assert(false); }
+STUB_ABORT(task_info)
 
-void thread_get_no_smt() { assert(false); }
+STUB_ABORT(thread_get_no_smt)
 
-void task_get_coalition() { assert(false); }
+STUB_ABORT(task_get_coalition)
 
-void atm_get_diagnostic_config() { assert(false); }
+STUB_ABORT(atm_get_diagnostic_config)
 
-void cfil_crypto_cleanup_state() { assert(false); }
+STUB_ABORT(cfil_crypto_cleanup_state)
 
-void copyin_atomic64() { assert(false); }
+STUB_ABORT(copyin_atomic64)
 
-void thread_drop_kevent_override() { assert(false); }
+STUB_ABORT(thread_drop_kevent_override)
 
-void filt_wlattach_sync_ipc() { assert(false); }
+STUB_ABORT(filt_wlattach_sync_ipc)
 
-void thread_deallocate_safe() { assert(false); }
+STUB_ABORT(thread_deallocate_safe)
 
-void vm_kernel_addrhash() { assert(false); }
+STUB_ABORT(vm_kernel_addrhash)
 
-void _vm_kernel_addrhash_XNU_INTERNAL() { assert(false); }
+STUB_ABORT(_vm_kernel_addrhash_XNU_INTERNAL)
 
-void thread_add_servicer_override() { assert(false); }
+STUB_ABORT(thread_add_servicer_override)
 
-void net_mpklog_type() { assert(false); }
+STUB_ABORT(net_mpklog_type)
 
-void mach_bridge_remote_time() { assert(false); }
+STUB_ABORT(mach_bridge_remote_time)
 
-void vn_getpath_ext() { assert(false); }
+STUB_ABORT(vn_getpath_ext)
 
-void wakeup_all_with_inheritor() { assert(false); }
+STUB_ABORT(wakeup_all_with_inheritor)
 
-void registerSleepWakeInterest() { assert(false); }
+STUB_ABORT(registerSleepWakeInterest)
 
-void absolutetime_to_microtime() { assert(false); }
+STUB_ABORT(absolutetime_to_microtime)
 
-void thread_abort() {
-  assert(false);
-}
-
-void strnstr() {
-  assert(false);
-}
-
-void thread_abort_safely() {
-  assert(false);
-}
+STUB_ABORT(thread_abort)
+STUB_ABORT(strnstr)
+STUB_ABORT(thread_abort_safely)
 
 uint32_t crc32(uint32_t crc, const void *buf, size_t size) {
   assert(false);
   return 0;
 }
 
-void cs_get_cdhash() {
-  assert(false);
-}
+STUB_ABORT(cs_get_cdhash)
+STUB_ABORT(cs_hash_type)
+STUB_ABORT(cs_valid)
+STUB_ABORT(mac_file_notify_close)
+STUB_ABORT(mach_bridge_timer_enable)
+STUB_ABORT(machine_thread_function_pointers_convert_from_user)
 
-void cs_hash_type() {
-  assert(false);
-}
+// 4 GiB — a plausible physical memory size for the faked environment
+uint64_t mem_actual = 4ULL * 1024 * 1024 * 1024;
 
-void cs_valid() {
-  assert(false);
-}
-
-void mac_file_notify_close() {
-  assert(false);
-}
-
-void mach_bridge_timer_enable() {
-  assert(false);
-}
-
-void machine_thread_function_pointers_convert_from_user() {
-  assert(false);
-}
-
-uint64_t mem_actual = 0x41414141;
-
-void proc_min_sdk() {
-  assert(false);
-}
-
-void proc_platform() {
-  assert(false);
-}
-
-void proc_sdk() {
-  assert(false);
-}
+STUB_ABORT(proc_min_sdk)
+STUB_ABORT(proc_platform)
+STUB_ABORT(proc_sdk)
 
 const char *sysctl_debug_get_preoslog(size_t *size) {
   assert(false);
   return NULL;
 }
 
-void task_get_filter_msg_flag() {
-  assert(false);
-}
+STUB_ABORT(task_get_filter_msg_flag)
+STUB_ABORT(task_set_filter_msg_flag)
+STUB_ABORT(thread_zone)
 
-void task_set_filter_msg_flag() {
-  assert(false);
-}
-
-void thread_zone() {
-  assert(false);
-}
-
+/*
+ * zone_require -- in the real kernel, asserts that a pointer was allocated
+ * from a specific zone.  This is a debug-only integrity check.  In the
+ * fuzzer, all zones are backed by malloc/calloc so this check is not
+ * meaningful.  No-op.
+ */
 void zone_require() {
-  assert(false);
 }

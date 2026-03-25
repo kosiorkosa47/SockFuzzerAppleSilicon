@@ -38,8 +38,6 @@
 
 int printf(const char*, ...) __printflike(1, 2);
 
-void free(void *ptr);
-
 // We link these in from libc/asan
 void* malloc(size_t size);
 void* calloc(size_t nmemb, size_t size);
@@ -66,9 +64,33 @@ zone_t zone_create(
 // TODO: validation here
 void zone_change() { return; }
 
+/*
+ * zalloc -- allocate one element from a zone.
+ *
+ * In the real kernel, zones are always initialized before use via the
+ * ZONE_DECLARE / zone_create startup path.  In the fuzzer build, zones
+ * declared with ZONE_DECLARE are left as NULL pointers because the
+ * STARTUP_ARG registration is a no-op (see fuzz/include/kern/startup.h).
+ *
+ * When we encounter a NULL zone we allocate a generous default buffer
+ * (4096 bytes).  This is intentionally larger than any XNU struct that
+ * could be allocated through a zone (typical sizes: knote ~200B,
+ * kqworkloop ~600B, pipepair ~700B).  Using a large default avoids
+ * ASAN heap-buffer-overflow false positives that occur when the
+ * allocation is smaller than the struct the caller writes into.
+ *
+ * When the zone is non-NULL (created via zinit/zone_create at runtime),
+ * we use z_elem_size as intended.  A z_elem_size of 0 is treated the
+ * same as NULL -- fall back to the 4096-byte default.
+ */
+#define ZALLOC_DEFAULT_SIZE 4096
+
 void* zalloc(struct zone* zone) {
-  assert(zone != NULL);
-  return calloc(1, zone->z_elem_size);
+  size_t size = ZALLOC_DEFAULT_SIZE;
+  if (zone != NULL && zone->z_elem_size > 0) {
+    size = zone->z_elem_size;
+  }
+  return calloc(1, size);
 }
 
 void* zalloc_noblock(struct zone* zone) { return zalloc(zone); }
@@ -108,10 +130,22 @@ uintptr_t kmem_mb_alloc(unsigned int mbmap, int size, int physContig,
 
   assert(mbutl);
   int pages = size / 4096;
+  if (current_page + pages > 65535) {
+    // Pool exhausted — wrap around to reuse pages.  In the real kernel
+    // this would be a hard failure, but for fuzzing we prefer to keep
+    // running so the iteration can complete and clear_all() can reset.
+    current_page = 0;
+  }
   uintptr_t ret = (uintptr_t)mbutl + (current_page * 4096);
   current_page += pages;
 
   return ret;
+}
+
+// Called from clear_all() to reclaim the mbuf page pool between iterations.
+__attribute__((visibility("default")))
+void kmem_mb_reset_pages(void) {
+  current_page = 0;
 }
 
 // TODO: actually simulate physical page mappings
@@ -175,6 +209,7 @@ kheap_free(
 }
 
 __startup_func
+__attribute__((no_sanitize("address")))
 void
 zone_create_startup(struct zone_create_startup_spec *spec)
 {
