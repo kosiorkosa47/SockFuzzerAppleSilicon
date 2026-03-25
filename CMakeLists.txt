@@ -734,7 +734,7 @@ else()
   add_executable(
     net_fuzzer fuzz/net_fuzzer.cc ${NET_PROTO_SRCS} ${NET_PROTO_HDRS} libxnu_relocatable.o
   )
-  add_dependencies(net_fuzzer bsd)
+  add_dependencies(net_fuzzer bsd osfmk)
   target_link_libraries(
     net_fuzzer
     ${FUZZER_LD_FLAGS}

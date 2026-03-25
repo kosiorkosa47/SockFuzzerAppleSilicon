@@ -1282,6 +1282,12 @@ enum IoctlIdx {
 }
 
 // TODO(upstream): clean these up, see if more headers have socket options
+// NOTE: allow_alias is required because socket option names from different
+// levels (SOL_SOCKET, IPPROTO_TCP, IPPROTO_IP, etc.) share numeric values.
+// This reduces mutation effectiveness — the mutator can't distinguish between
+// SO_DEBUG=1 and TCP_NODELAY=1. A future improvement would split this into
+// per-level enums (SolSocketOpt, TcpOpt, IpOpt, etc.) and use a oneof in
+// SetSocketOpt keyed on the level field. See ROADMAP.md item #59.
 enum SocketOptName {
   option allow_alias = true;
   // socket.h

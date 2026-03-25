@@ -332,8 +332,8 @@ std::string get_ip_hdr(const IpHdr &hdr, size_t expected_size) {
 
 std::string get_tcp_hdr(const TcpHdr &hdr) {
   struct tcphdr tcphdr = {
-      .th_sport = (unsigned short)hdr.th_sport(),
-      .th_dport = (unsigned short)hdr.th_dport(),
+      .th_sport = __builtin_bswap16((unsigned short)hdr.th_sport()),
+      .th_dport = __builtin_bswap16((unsigned short)hdr.th_dport()),
       .th_seq = __builtin_bswap32(hdr.th_seq()),
       .th_ack = __builtin_bswap32(hdr.th_ack()),
       .th_off = hdr.th_off(),
@@ -344,7 +344,7 @@ std::string get_tcp_hdr(const TcpHdr &hdr) {
   };
 
   for (const int flag : hdr.th_flags()) {
-    tcphdr.th_flags ^= flag;
+    tcphdr.th_flags |= flag;
   }
 
   // Prefer pure syn

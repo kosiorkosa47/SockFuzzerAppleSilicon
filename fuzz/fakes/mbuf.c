@@ -166,8 +166,15 @@ int mcache_alloc_ext(mcache_t* cp, void** list, unsigned int num, int wait) {
   m->m_hdr.mh_nextpkt = NULL;
   m->m_type = MT_FREE;
   m->m_flags = M_EXT;
-  m->m_hdr.mh_data = (caddr_t)calloc(1, num * cp->bufsize);
+  m->m_ext.ext_buf = (caddr_t)calloc(1, num * cp->bufsize);
+  m->m_ext.ext_size = num * cp->bufsize;
+  m->m_hdr.mh_data = m->m_ext.ext_buf;
   m->m_hdr.mh_len = num * cp->bufsize;
+  // Set up ext_refflags so m_free can properly clean up.
+  struct ext_ref* rfa = (struct ext_ref*)calloc(1, sizeof(struct ext_ref));
+  rfa->refcnt = 1;
+  rfa->minref = 1;
+  m->m_ext.ext_refflags = rfa;
   *list = m;
   return 1;
 }

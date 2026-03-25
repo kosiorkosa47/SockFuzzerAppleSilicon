@@ -60,7 +60,7 @@ COPY --from=builder /build/source/scripts/ /work/scripts/
 
 RUN mkdir -p corpus crashes && chmod +x scripts/*.sh
 
-ENV ASAN_OPTIONS=detect_container_overflow=0:halt_on_error=0
+ENV ASAN_OPTIONS=detect_container_overflow=0:halt_on_error=1
 
 ENTRYPOINT ["/work/net_fuzzer"]
 CMD ["corpus/", "-artifact_prefix=crashes/", "-dict=net_fuzzer.dict"]
