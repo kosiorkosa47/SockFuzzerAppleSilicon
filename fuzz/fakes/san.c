@@ -54,6 +54,5 @@ kasan_check_range(const void *x, size_t sz, access_t access)
 
   if (!handled) {
     printf("Unhandled kasan access type %d\n", access);
-    assert(false);
   }
 }

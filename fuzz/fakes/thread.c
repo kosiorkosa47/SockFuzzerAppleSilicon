@@ -33,7 +33,7 @@
 
 typedef void* thread_t;
 
-thread_t current_thread() { return NULL; }
+thread_t current_thread() { return (thread_t)fake_thread; }
 
 kern_return_t thread_policy_set() {
     return KERN_SUCCESS;

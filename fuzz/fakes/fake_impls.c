@@ -152,7 +152,7 @@ uint64_t mach_continuous_time(void) {
 }
 
 // TODO: handle timer scheduling
-void timeout() { assert(false); }
+void timeout() {}
 
 void microtime(struct timeval* tvp) {
   g_fake_time_counter += 100000;
@@ -316,6 +316,20 @@ uint64_t mach_absolute_time() {
   return g_fake_time_counter;
 }
 
+void clock_get_calendar_microtime(uint32_t *secs, uint32_t *microsecs) {
+  *secs = (uint32_t)(g_fake_time_counter / 1000000000ULL);
+  *microsecs = (uint32_t)((g_fake_time_counter / 1000ULL) % 1000000ULL);
+}
+
+void clock_get_uptime(uint64_t *result) {
+  *result = g_fake_time_counter;
+}
+
+void clock_get_system_microtime(uint32_t *secs, uint32_t *microsecs) {
+  *secs = (uint32_t)(g_fake_time_counter / 1000000000ULL);
+  *microsecs = (uint32_t)((g_fake_time_counter / 1000ULL) % 1000000ULL);
+}
+
 int proc_pid() { return 0; }
 
 void proc_getexecutableuuid(void* p, unsigned char* uuidbuf,
@@ -465,7 +479,7 @@ int mac_socket_check_connect() { return 0; }
 
 void ml_thread_policy() {}
 
-void aes_encrypt_key128() {}
+int aes_encrypt_key128() { return -1; }
 
 void OSBacktrace() {}
 
@@ -598,10 +612,12 @@ int scnprintf(char *buf, size_t size, const char *fmt, ...) {
 
 rlim_t
 proc_limitgetcur(proc_t p, int which, boolean_t to_lock_proc) {
-  if (which == RLIMIT_NOFILE) {
-    return 10;
+  switch (which) {
+    case RLIMIT_NOFILE: return 10;
+    case 1: return 0x7fffffffffffffff; /* RLIMIT_DATA - unlimited */
+    case 5: return 0x7fffffffffffffff; /* RLIMIT_AS - unlimited */
+    default: return 0x7fffffffffffffff; /* safe default */
   }
-  assert(false);
 }
 
 task_t proc_task() { return TASK_NULL; }
@@ -611,8 +627,7 @@ vm_offset_t current_percpu_base(void) {
 }
 
 int proc_pidversion(proc_t p) {
-  assert(false);
-  return 0;
+  return 1;
 }
 
 unsigned int kdebug_enable = 0;

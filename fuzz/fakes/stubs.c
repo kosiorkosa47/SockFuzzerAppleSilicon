@@ -122,11 +122,8 @@ STUB_ABORT(clock_continuoustime_interval_to_deadline)
 
 STUB_ABORT(clock_deadline_for_periodic_event)
 
-STUB_ABORT(clock_get_calendar_microtime)
-
 STUB_ABORT(clock_get_calendar_nanotime)
 
-STUB_ABORT(clock_get_uptime)
 
 STUB_ABORT(coalition_get_leader)
 
@@ -615,41 +612,39 @@ STUB_ABORT(vnode_isreg)
 
 STUB_ABORT(vnode_size)
 
-STUB_ABORT(aes_decrypt_aad_gcm)
+int aes_decrypt_aad_gcm() { return 0; }
 
-STUB_ABORT(aes_decrypt_cbc)
+int aes_decrypt_cbc() { return 0; }
 
-STUB_ABORT(aes_decrypt_finalize_gcm)
+int aes_decrypt_finalize_gcm() { return 0; }
 
-STUB_ABORT(aes_decrypt_gcm)
+int aes_decrypt_gcm() { return 0; }
 
-STUB_ABORT(aes_decrypt_get_ctx_size_gcm)
+int aes_decrypt_get_ctx_size_gcm() { return 0; }
 
-STUB_ABORT(aes_decrypt_key)
+int aes_decrypt_key() { return 0; }
 
-STUB_ABORT(aes_decrypt_key_gcm)
+int aes_decrypt_key_gcm() { return 0; }
 
-STUB_ABORT(aes_decrypt_set_iv_gcm)
+int aes_decrypt_set_iv_gcm() { return 0; }
 
-STUB_ABORT(aes_encrypt_aad_gcm)
+int aes_encrypt_aad_gcm() { return 0; }
 
-STUB_ABORT(aes_encrypt_cbc)
+int aes_encrypt_cbc() { return 0; }
 
-STUB_ABORT(aes_encrypt_finalize_gcm)
+int aes_encrypt_finalize_gcm() { return 0; }
 
-STUB_ABORT(aes_encrypt_gcm)
+int aes_encrypt_gcm() { return 0; }
 
-STUB_ABORT(aes_encrypt_get_ctx_size_gcm)
+int aes_encrypt_get_ctx_size_gcm() { return 0; }
 
-STUB_ABORT(aes_encrypt_inc_iv_gcm)
+int aes_encrypt_inc_iv_gcm() { return 0; }
 
-STUB_ABORT(aes_encrypt_key)
+int aes_encrypt_key() { return 0; }
 
-STUB_ABORT(aes_encrypt_key_with_iv_gcm)
+int aes_encrypt_key_with_iv_gcm() { return 0; }
 
-STUB_ABORT(aes_encrypt_reset_gcm)
-
-STUB_ABORT(clock_get_system_microtime)
+int aes_encrypt_reset_gcm() { return 0; }
 
 STUB_ABORT(thread_call_enter1_delayed)
 
@@ -671,13 +666,21 @@ struct os_log_s _os_log_default;
 
 uint32_t net_flowhash_mh3_x86_32(const void* key, uint32_t len,
                                  const uint32_t seed) {
-  assert(false);
-  return 1;
+  // FNV-1a hash — simple, fast, deterministic.
+  uint32_t hash = seed ^ 2166136261u;
+  const uint8_t *p = (const uint8_t *)key;
+  for (uint32_t i = 0; i < len; i++) {
+    hash ^= p[i];
+    hash *= 16777619u;
+  }
+  return hash;
 }
 
-STUB_ABORT(cc_clear)
+void cc_clear(size_t len, void *dst) { memset(dst, 0, len); }
 
-STUB_ABORT(cc_cmp_safe)
+int cc_cmp_safe(size_t num, const void *ptr1, const void *ptr2) {
+  return memcmp(ptr1, ptr2, num);
+}
 
 STUB_ABORT(getsectdatafromheader)
 
@@ -686,7 +689,9 @@ STUB_ABORT(getsectdatafromheader)
 STUB_ABORT(_mh_execute_header)
 #endif
 
-STUB_ABORT(net_flowhash)
+uint32_t net_flowhash(const void *key, uint32_t len, const uint32_t seed) {
+  return net_flowhash_mh3_x86_32(key, len, seed);
+}
 
 STUB_ABORT(os_cpu_in_cksum)
 

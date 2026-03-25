@@ -763,6 +763,7 @@ target_compile_options(
 # Unit tests
 # --------------------------------------------------------------------------
 if(NOT DEFINED ENV{SANITIZER})
+  enable_testing()
   add_executable(fake_impls_test fuzz/fakes/fake_impls_test.cc)
   target_compile_options(fake_impls_test PRIVATE -std=c++17 -g)
   target_include_directories(fake_impls_test PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
@@ -780,7 +781,6 @@ if(NOT DEFINED ENV{SANITIZER})
     )
   endif()
   add_test(NAME fake_impls_test COMMAND fake_impls_test)
-  enable_testing()
 endif()
 
 # --------------------------------------------------------------------------
