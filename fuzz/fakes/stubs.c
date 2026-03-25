@@ -884,12 +884,12 @@ STUB_ABORT(registerSleepWakeInterest)
 STUB_ABORT(absolutetime_to_microtime)
 
 STUB_ABORT(thread_abort)
-char *strnstr(const char *s, const char *find, size_t slen) {
+const char *strnstr(const char *s, const char *find, size_t slen) {
   size_t flen = strlen(find);
-  if (flen == 0) return (char *)s;
+  if (flen == 0) return s;
   for (; slen >= flen; s++, slen--) {
     if (s[0] == find[0] && memcmp(s, find, flen) == 0)
-      return (char *)s;
+      return s;
   }
   return NULL;
 }
