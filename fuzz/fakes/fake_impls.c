@@ -507,10 +507,13 @@ void OSBacktrace() {}
 
 void lck_grp_attr_setdefault() {}
 
-void nanouptime(struct timespec *tp) {
+void nanouptime(void *tp) {
   g_fake_time_counter += 100000;
-  tp->tv_sec = g_fake_time_counter / 1000000000ULL;
-  tp->tv_nsec = g_fake_time_counter % 1000000000ULL;
+  // struct timespec is opaque here — write through raw pointer.
+  // Layout: { long tv_sec; long tv_nsec; }
+  long *fields = (long *)tp;
+  fields[0] = (long)(g_fake_time_counter / 1000000000ULL);
+  fields[1] = (long)(g_fake_time_counter % 1000000000ULL);
 }
 
 void wakeup_one() {}
