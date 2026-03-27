@@ -678,12 +678,6 @@ void kernel_debug_string_early(const char *message) {
   (void)message;
 }
 
-// Content filter stubs (#172) — unblock cfil_sock_attach path.
-// necp_socket_get_content_filter_control_unit must return non-zero
-// for cfil_sock_attach to proceed past the first gate.
-uint32_t necp_socket_get_content_filter_control_unit(void *so) {
-  return get_fuzzed_bool() ? 1 : 0;  // sometimes enable, sometimes not
-}
-
-// Content filter active count — must be > 0 for cfil_sock_attach (gate 2).
-uint32_t cfil_active_count = 1;
+// Content filter (#172): necp_socket_get_content_filter_control_unit and
+// cfil_active_count are provided by the real XNU sources (necp.c,
+// content_filter.c). No stubs needed — they're compiled in BSD_SOURCES.

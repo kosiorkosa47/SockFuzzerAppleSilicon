@@ -61,5 +61,3 @@ _sendmsg_wrapper
 _sendto_nocancel_wrapper
 _necp_match_policy_wrapper
 _kmem_mb_reset_pages
-_necp_socket_get_content_filter_control_unit
-_cfil_active_count
