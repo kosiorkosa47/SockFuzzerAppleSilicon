@@ -43,6 +43,19 @@ extern "C" {
 #include "types.h"
 }
 
+// XNU protocol/level constants — avoid magic numbers in handlers.
+#define XNU_SOL_SOCKET    0xffff
+#define XNU_IPPROTO_TCP   6
+#define XNU_IPPROTO_IP    0
+#define XNU_IPPROTO_IPV6  41
+#define XNU_AF_INET       2
+#define XNU_AF_INET6      30
+#define XNU_AF_UNIX       1
+#define XNU_AF_SYSTEM     32
+#define XNU_AF_MULTIPATH  39
+#define XNU_SOCK_STREAM   1
+#define XNU_SOCK_DGRAM    2
+
 // Helper: combine repeated MsgFlag enum into bitmask.
 template <typename T>
 int combine_flags(const T &flags) {
@@ -266,7 +279,7 @@ std::string get_sockaddr(const SockAddr &sockaddr) {
         uint32_t sc_reserved[5];
       } sctl = {};
       sctl.sc_len = sizeof(sctl);
-      sctl.sc_family = 32;  // AF_SYSTEM
+      sctl.sc_family = XNU_AF_SYSTEM;
       sctl.ss_sysaddr = 2;  // SYSPROTO_CONTROL
       sctl.sc_id = sockaddr.sockaddr_ctl().sc_id();
       sctl.sc_unit = sockaddr.sockaddr_ctl().sc_unit();
@@ -979,25 +992,25 @@ void HandleSetSockOpt(const Command &command) {
         val_data = BuildSockOptVal(sopt.legacy().val());
       break;
     case SetSocketOpt::kSolSocket:
-      level = 0xffff;  // SOL_SOCKET
+      level = XNU_SOL_SOCKET;
       name = sopt.sol_socket().name();
       if (sopt.sol_socket().has_val())
         val_data = BuildSockOptVal(sopt.sol_socket().val());
       break;
     case SetSocketOpt::kTcp:
-      level = 6;  // IPPROTO_TCP
+      level = XNU_IPPROTO_TCP;
       name = sopt.tcp().name();
       if (sopt.tcp().has_val())
         val_data = BuildSockOptVal(sopt.tcp().val());
       break;
     case SetSocketOpt::kIp:
-      level = 0;  // IPPROTO_IP
+      level = XNU_IPPROTO_IP;
       name = sopt.ip().name();
       if (sopt.ip().has_val())
         val_data = BuildSockOptVal(sopt.ip().val());
       break;
     case SetSocketOpt::kIpv6:
-      level = 41;  // IPPROTO_IPV6
+      level = XNU_IPPROTO_IPV6;
       name = sopt.ipv6().name();
       if (sopt.ipv6().has_val())
         val_data = BuildSockOptVal(sopt.ipv6().val());
@@ -1531,20 +1544,18 @@ DEFINE_BINARY_PROTO_FUZZER(const Session &session) {
       case Command::kMptcpSocket: {
         // AF_MULTIPATH = 39 in XNU
         int fd = 0;
-        int err = socket_wrapper(39, command.mptcp_socket().so_type(), 0, &fd);
+        int err = socket_wrapper(XNU_AF_MULTIPATH, command.mptcp_socket().so_type(), 0, &fd);
         if (err == 0) {
           assert(open_fds.find(fd) == open_fds.end());
           open_fds.insert(fd);
         }
         break;
       }
-#define SOL_SOCKET_XNU 0xffff
-#define MPTCP_SERVICE_TYPE_OPT 0x0213  // 531
       case Command::kMptcpSetsockopt: {
         int svc_type = command.mptcp_setsockopt().service_type();
         setsockopt_wrapper(command.mptcp_setsockopt().fd(),
-                           SOL_SOCKET_XNU,
-                           MPTCP_SERVICE_TYPE_OPT,
+                           XNU_SOL_SOCKET,
+                           0x0213,  // MPTCP_SERVICE_TYPE_OPT
                            (caddr_t)&svc_type, sizeof(svc_type), nullptr);
         break;
       }
@@ -1582,16 +1593,16 @@ DEFINE_BINARY_PROTO_FUZZER(const Session &session) {
         open_fds.insert(fd);
 
         // Bind to a port.
-        if (domain == 30) {  // AF_INET6
+        if (domain == XNU_AF_INET6) {
           struct sockaddr_in6 sin6 = {};
           sin6.sin6_len = sizeof(sin6);
-          sin6.sin6_family = 30;
+          sin6.sin6_family = XNU_AF_INET6;
           sin6.sin6_port = __builtin_bswap16((unsigned short)command.tcp_session().port());
           bind_wrapper(fd, (caddr_t)&sin6, sizeof(sin6), nullptr);
         } else {
           struct sockaddr_in sin = {};
           sin.sin_len = sizeof(sin);
-          sin.sin_family = 2;
+          sin.sin_family = XNU_AF_INET;
           sin.sin_port = __builtin_bswap16((unsigned short)command.tcp_session().port());
           sin.sin_addr.s_addr = 0;
           bind_wrapper(fd, (caddr_t)&sin, sizeof(sin), nullptr);
@@ -1628,12 +1639,12 @@ DEFINE_BINARY_PROTO_FUZZER(const Session &session) {
             if (sopt.legacy().has_val())
               val_data = BuildSockOptVal(sopt.legacy().val());
           } else if (sopt.has_sol_socket()) {
-            level = 0xffff;
+            level = XNU_SOL_SOCKET;
             name = sopt.sol_socket().name();
             if (sopt.sol_socket().has_val())
               val_data = BuildSockOptVal(sopt.sol_socket().val());
           } else if (sopt.has_tcp()) {
-            level = 6;
+            level = XNU_IPPROTO_TCP;
             name = sopt.tcp().name();
             if (sopt.tcp().has_val())
               val_data = BuildSockOptVal(sopt.tcp().val());
@@ -1655,8 +1666,8 @@ DEFINE_BINARY_PROTO_FUZZER(const Session &session) {
         // Uses SO_CFIL_SOCK_ID socket option (4368) to interact with cfil.
         int cfil_id = command.cfil_attach().filter_id();
         setsockopt_wrapper(command.cfil_attach().fd(),
-                           0xffff,  // SOL_SOCKET
-                           4368,    // SO_CFIL_SOCK_ID
+                           XNU_SOL_SOCKET,
+                           4368,    // SO_CFIL_SOCK_ID (no XNU public define)
                            (caddr_t)&cfil_id, sizeof(cfil_id), nullptr);
         break;
       }
@@ -1664,7 +1675,7 @@ DEFINE_BINARY_PROTO_FUZZER(const Session &session) {
         // Flow divert (#89) — set SO_FLOW_DIVERT_TOKEN then connect.
         int token = command.flow_divert_connect().flow_id();
         setsockopt_wrapper(command.flow_divert_connect().fd(),
-                           0xffff,  // SOL_SOCKET
+                           XNU_SOL_SOCKET,
                            4358,    // SO_FLOW_DIVERT_TOKEN
                            (caddr_t)&token, sizeof(token), nullptr);
         if (command.flow_divert_connect().has_target()) {

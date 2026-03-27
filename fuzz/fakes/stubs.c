@@ -81,25 +81,16 @@ STUB_ABORT(addupc_task)
 
 int assert_wait() { return 0; }
 
-STUB_ABORT(audit_arg_addr)
-
-STUB_ABORT(audit_arg_cmd)
-
-STUB_ABORT(audit_arg_ctlname)
-
-STUB_ABORT(audit_arg_fd)
-
-STUB_ABORT(audit_arg_file)
-
-STUB_ABORT(audit_arg_pid)
-
-STUB_ABORT(audit_arg_process)
-
-STUB_ABORT(audit_arg_signum)
-
-STUB_ABORT(audit_arg_value64)
-
-STUB_ABORT(audit_syscalls)
+void audit_arg_addr() {}
+void audit_arg_cmd() {}
+void audit_arg_ctlname() {}
+void audit_arg_fd() {}
+void audit_arg_file() {}
+void audit_arg_pid() {}
+void audit_arg_process() {}
+void audit_arg_signum() {}
+void audit_arg_value64() {}
+void audit_syscalls() {}
 
 STUB_ABORT(bsd_exception)
 
@@ -114,7 +105,7 @@ int cc_rand_generate(void *out, size_t outlen) {
 
 STUB_ABORT(check_actforsig)
 
-STUB_ABORT(clear_thread_rwlock_boost)
+void clear_thread_rwlock_boost() {}
 
 void clock_absolutetime_interval_to_deadline(uint64_t interval, uint64_t *deadline) {
   extern uint64_t g_fake_time_counter;
@@ -126,7 +117,10 @@ void clock_continuoustime_interval_to_deadline(uint64_t interval, uint64_t *dead
   *deadline = g_fake_time_counter + interval;
 }
 
-STUB_ABORT(clock_deadline_for_periodic_event)
+void clock_deadline_for_periodic_event(uint64_t interval, uint64_t abstime, uint64_t *deadline) {
+  extern uint64_t g_fake_time_counter;
+  *deadline = g_fake_time_counter + interval;
+}
 
 void clock_get_calendar_nanotime(void *secs, void *nanosecs) {
   extern uint64_t g_fake_time_counter;
@@ -158,7 +152,7 @@ STUB_ABORT(coredump)
 
 STUB_ABORT(cs_identity_get)
 
-STUB_ABORT(current_task)
+void* current_task() { return (void*)1; }
 
 int deflate(void *strm, int flush) { return 1; /* Z_STREAM_END */ }
 
@@ -180,9 +174,8 @@ STUB_ABORT(gPEClockFrequencyInfo)
 
 void* g_crypto_funcs = NULL;
 
-STUB_ABORT(get_bsdtask_info)
-
-STUB_ABORT(get_bsdthreadtask_info)
+void* get_bsdtask_info() { extern char fake_uthread[]; return fake_uthread; }
+void* get_bsdthreadtask_info() { extern char fake_uthread[]; return fake_uthread; }
 
 STUB_ABORT(get_signalact)
 
@@ -190,13 +183,10 @@ STUB_ABORT(get_threadtask)
 
 STUB_ABORT(get_useraddr)
 
-STUB_ABORT(hashaddr)
-
-STUB_ABORT(hashbacktrace)
-
-STUB_ABORT(hostname)
-
-STUB_ABORT(hz)
+uint32_t hashaddr() { return 0; }
+uint32_t hashbacktrace() { return 0; }
+char hostname[256] = "localhost";
+int hz = 100;
 
 int inflate(void *strm, int flush) { return 1; /* Z_STREAM_END */ }
 
@@ -204,23 +194,15 @@ int inflateReset(void *strm) { return 0; }
 
 STUB_ABORT(initproc)
 
-STUB_ABORT(ipc_entry_name_mask)
-
-STUB_ABORT(is_kerneltask)
-
-STUB_ABORT(itimerdecr)
-
-STUB_ABORT(itimerfix)
-
-STUB_ABORT(kauth_authorize_generic)
-
-STUB_ABORT(kauth_cred_getgid)
-
-STUB_ABORT(kauth_cred_getruid)
-
-STUB_ABORT(kauth_cred_getsvuid)
-
-STUB_ABORT(kauth_getruid)
+unsigned int ipc_entry_name_mask = 0;
+int is_kerneltask() { return 1; }
+int itimerdecr() { return 0; }
+int itimerfix() { return 0; }
+int kauth_authorize_generic() { return 0; }
+int kauth_cred_getgid() { return 0; }
+int kauth_cred_getruid() { return 0; }
+int kauth_cred_getsvuid() { return 0; }
+int kauth_getruid() { return 0; }
 
 STUB_ABORT(kcdata_estimate_required_buffer_size)
 
@@ -390,7 +372,7 @@ STUB_ABORT(semaphore_wait_trap_internal)
 
 STUB_ABORT(sendsig)
 
-STUB_ABORT(set_thread_rwlock_boost)
+void set_thread_rwlock_boost() {}
 
 STUB_ABORT(spec_filtops)
 
@@ -497,9 +479,8 @@ STUB_ABORT(thread_tid)
 
 STUB_ABORT(thread_update_ipc_override)
 
-STUB_ABORT(thread_wakeup_thread)
-
-STUB_ABORT(tick)
+void thread_wakeup_thread() {}
+int tick = 10000;
 
 STUB_ABORT(timeout_with_leeway)
 
@@ -617,9 +598,8 @@ STUB_ABORT(vnode_ref)
 
 STUB_ABORT(vnode_rele)
 
-STUB_ABORT(audit_arg_sockaddr)
-
-STUB_ABORT(audit_arg_socket)
+void audit_arg_sockaddr() {}
+void audit_arg_socket() {}
 
 STUB_ABORT(audit_arg_value32)
 
@@ -798,7 +778,7 @@ STUB_ABORT(turnstile_reference)
 
 STUB_ABORT(_pthread_priority_combine)
 
-STUB_ABORT(cchmac_final)
+void cchmac_final() {}
 
 STUB_ABORT(thread_update_kevent_override)
 
@@ -820,7 +800,7 @@ STUB_ABORT(sysctl_task_get_no_smt)
 
 STUB_ABORT(hostname_lock)
 
-STUB_ABORT(cchmac_update)
+void cchmac_update() {}
 
 STUB_ABORT(_os_log_internal_driverKit)
 
@@ -830,7 +810,7 @@ STUB_ABORT(machine_csv)
 
 STUB_ABORT(act_clear_astkevent)
 
-STUB_ABORT(cchmac_init)
+void cchmac_init() {}
 
 STUB_ABORT(thread_drop_servicer_override)
 
@@ -856,13 +836,13 @@ STUB_ABORT(_enable_preemption)
 
 STUB_ABORT(restricted_port_bitmap)
 
-STUB_ABORT(cfil_crypto_sign_data)
+int cfil_crypto_sign_data() { return 0; }
 
 STUB_ABORT(thread_set_no_smt)
 
 STUB_ABORT(net_mpklog_enabled)
 
-STUB_ABORT(cfil_crypto_init_client)
+int cfil_crypto_init_client() { return 0; }
 
 STUB_ABORT(task_info)
 
@@ -872,7 +852,7 @@ STUB_ABORT(task_get_coalition)
 
 STUB_ABORT(atm_get_diagnostic_config)
 
-STUB_ABORT(cfil_crypto_cleanup_state)
+void cfil_crypto_cleanup_state() {}
 
 STUB_ABORT(copyin_atomic64)
 

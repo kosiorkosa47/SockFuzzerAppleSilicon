@@ -817,10 +817,12 @@ if(NOT DEFINED ENV{SANITIZER} AND APPLE)
 
   add_custom_command(
     OUTPUT libxnu_cov_relocatable.o
-    COMMAND ld -r -arch ${CMAKE_SYSTEM_PROCESSOR} $<TARGET_OBJECTS:bsd_cov> $<TARGET_OBJECTS:osfmk_cov> -o libxnu_cov_relocatable.o
-    DEPENDS $<TARGET_OBJECTS:bsd_cov> $<TARGET_OBJECTS:osfmk_cov>
-    COMMAND_EXPAND_LISTS VERBATIM
-    COMMENT "Creating coverage-instrumented XNU object"
+    COMMAND ld -r -arch ${CMAKE_SYSTEM_PROCESSOR} $<TARGET_OBJECTS:bsd_cov> $<TARGET_OBJECTS:osfmk_cov> -o libxnu_relocatable_raw.o
+    COMMAND /bin/bash ${CMAKE_CURRENT_SOURCE_DIR}/cmake/localize_syms.sh ${CMAKE_CURRENT_BINARY_DIR}/xnu_cov_exported_symbols.txt
+    COMMAND ${CMAKE_COMMAND} -E rename libxnu_relocatable.o libxnu_cov_relocatable.o
+    DEPENDS $<TARGET_OBJECTS:bsd_cov> $<TARGET_OBJECTS:osfmk_cov> ${CMAKE_CURRENT_BINARY_DIR}/xnu_cov_exported_symbols.txt
+    COMMAND_EXPAND_LISTS
+    COMMENT "Creating coverage-instrumented XNU object with localized symbols"
   )
   add_custom_target(xnu_cov_obj DEPENDS libxnu_cov_relocatable.o)
   add_dependencies(xnu_cov_obj bsd_cov osfmk_cov)
