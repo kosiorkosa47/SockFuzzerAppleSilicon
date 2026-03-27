@@ -25,7 +25,7 @@ jobs:
           restore-keys: brew-${{ runner.os }}-
 
       - name: Install dependencies
-        run: brew install cmake protobuf abseil llvm
+        run: brew install cmake protobuf abseil llvm coreutils
 
       - name: Configure
         run: |
@@ -41,8 +41,10 @@ jobs:
         run: |
           cd build
           mkdir -p corpus crashes
+          TIMEOUT_CMD="timeout"
+          command -v gtimeout >/dev/null 2>&1 && TIMEOUT_CMD="gtimeout"
           ASAN_OPTIONS=detect_container_overflow=0:halt_on_error=0 \
-            timeout 10 ./net_fuzzer corpus/ -artifact_prefix=crashes/ \
+            $TIMEOUT_CMD 10 ./net_fuzzer corpus/ -artifact_prefix=crashes/ \
             -max_total_time=5 2>&1; EXIT_CODE=$?
           # Exit codes: 0=clean, 124=timeout(expected), 77=XNU assert(finding)
           if [ "$EXIT_CODE" -ne 0 ] && [ "$EXIT_CODE" -ne 124 ] && [ "$EXIT_CODE" -ne 77 ]; then
