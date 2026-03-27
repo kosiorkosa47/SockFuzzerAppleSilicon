@@ -890,7 +890,7 @@ const char *strnstr(const char *s, const char *find, size_t slen) {
   }
   return NULL;
 }
-STUB_ABORT(thread_abort_safely)
+void thread_abort_safely() {}
 
 uint32_t crc32(uint32_t crc, const void *buf, size_t size) {
   const uint8_t *p = (const uint8_t *)buf;
@@ -904,28 +904,28 @@ uint32_t crc32(uint32_t crc, const void *buf, size_t size) {
   return ~crc;
 }
 
-STUB_ABORT(cs_get_cdhash)
-STUB_ABORT(cs_hash_type)
-STUB_ABORT(cs_valid)
-STUB_ABORT(mac_file_notify_close)
-STUB_ABORT(mach_bridge_timer_enable)
-STUB_ABORT(machine_thread_function_pointers_convert_from_user)
+void cs_get_cdhash() {}
+void cs_hash_type() {}
+void cs_valid() {}
+void mac_file_notify_close() {}
+void mach_bridge_timer_enable() {}
+void machine_thread_function_pointers_convert_from_user() {}
 
 // 4 GiB — a plausible physical memory size for the faked environment
 uint64_t mem_actual = 4ULL * 1024 * 1024 * 1024;
 
-STUB_ABORT(proc_min_sdk)
-STUB_ABORT(proc_platform)
-STUB_ABORT(proc_sdk)
+void proc_min_sdk() {}
+void proc_platform() {}
+void proc_sdk() {}
 
 const char *sysctl_debug_get_preoslog(size_t *size) {
   assert(false);
   return NULL;
 }
 
-STUB_ABORT(task_get_filter_msg_flag)
-STUB_ABORT(task_set_filter_msg_flag)
-STUB_ABORT(thread_zone)
+void task_get_filter_msg_flag() {}
+void task_set_filter_msg_flag() {}
+void thread_zone() {}
 
 /*
  * zone_require -- in the real kernel, asserts that a pointer was allocated

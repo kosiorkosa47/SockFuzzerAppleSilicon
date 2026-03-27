@@ -134,106 +134,106 @@ btlog_create(size_t numrecords,
       assert(false);
     }
 
-STUB_ABORT(machine_init)
-STUB_ABORT(device_service_create)
-STUB_ABORT(bsd_init)
+void machine_init() {}
+void device_service_create() {}
+void bsd_init() {}
 
-void slave_machine_init(__unused void *param) { printf("STUB HIT: slave_machine_init\n"); __builtin_trap(); }
+void slave_machine_init(__unused void *param) {}
 
-STUB_ABORT(phys_carveout_init)
-STUB_ABORT(hv_support_init)
-STUB_ABORT(vm_mem_bootstrap)
-STUB_ABORT(kdp_init)
-STUB_ABORT(workq_init)
-STUB_ABORT(machine_lockdown)
-STUB_ABORT(thread_max)
-STUB_ABORT(kperf_init_early)
-STUB_ABORT(thread_daemon_init)
-STUB_ABORT(mac_policy_initmach)
-STUB_ABORT(vm_kernel_reserved_entry_init)
-STUB_ABORT(kdebug_free_early_buf)
-STUB_ABORT(turnstiles_init)
-STUB_ABORT(vm_commpage_text_init)
-STUB_ABORT(machine_load_context)
-STUB_ABORT(ipc_pthread_priority_init)
-STUB_ABORT(PE_i_can_has_debugger)
-STUB_ABORT(sfi_init)
-STUB_ABORT(dtrace_early_init)
-STUB_ABORT(sched_startup)
-STUB_ABORT(ml_get_interrupts_enabled)
-STUB_ABORT(kernel_list_tests)
-STUB_ABORT(thread_machine_init_template)
-STUB_ABORT(task_max)
-STUB_ABORT(thread_get_perfcontrol_class)
-STUB_ABORT(ml_set_interrupts_enabled)
-STUB_ABORT(processor_up)
-STUB_ABORT(exception_init)
-STUB_ABORT(vm_set_restrictions)
-STUB_ABORT(thread_init)
-STUB_ABORT(console_init)
-STUB_ABORT(idle_thread_create)
-STUB_ABORT(PE_init_iokit)
-STUB_ABORT(mac_policy_init)
-STUB_ABORT(bsd_scale_setup)
-STUB_ABORT(mapping_adjust)
-STUB_ABORT(trust_cache_init)
+void phys_carveout_init() {}
+void hv_support_init() {}
+void vm_mem_bootstrap() {}
+void kdp_init() {}
+void workq_init() {}
+void machine_lockdown() {}
+void thread_max() {}
+void kperf_init_early() {}
+void thread_daemon_init() {}
+void mac_policy_initmach() {}
+void vm_kernel_reserved_entry_init() {}
+void kdebug_free_early_buf() {}
+void turnstiles_init() {}
+void vm_commpage_text_init() {}
+void machine_load_context() {}
+void ipc_pthread_priority_init() {}
+void PE_i_can_has_debugger() {}
+void sfi_init() {}
+void dtrace_early_init() {}
+void sched_startup() {}
+void ml_get_interrupts_enabled() {}
+void kernel_list_tests() {}
+void thread_machine_init_template() {}
+void task_max() {}
+void thread_get_perfcontrol_class() {}
+void ml_set_interrupts_enabled() {}
+void processor_up() {}
+void exception_init() {}
+void vm_set_restrictions() {}
+void thread_init() {}
+void console_init() {}
+void idle_thread_create() {}
+void PE_init_iokit() {}
+void mac_policy_init() {}
+void bsd_scale_setup() {}
+void mapping_adjust() {}
+void trust_cache_init() {}
 
 vm_size_t mem_size = 4000000;
 
-STUB_ABORT(version_minor)
-STUB_ABORT(restartable_init)
-STUB_ABORT(clock_init)
-STUB_ABORT(kpc_init)
-STUB_ABORT(vnguard_policy_init)
-STUB_ABORT(coalitions_init)
-STUB_ABORT(PE_lockdown_iokit)
-STUB_ABORT(work_interval_subsystem_init)
-STUB_ABORT(kernel_do_post)
-STUB_ABORT(stack_alloc_try)
-STUB_ABORT(vm_commpage_init)
-STUB_ABORT(serial_keyboard_init)
-STUB_ABORT(stackshot_init)
-STUB_ABORT(task_threadmax)
-STUB_ABORT(version)
-STUB_ABORT(mach_init_activity_id)
-STUB_ABORT(current_processor)
-STUB_ABORT(telemetry_init)
-STUB_ABORT(vm_pageout)
-STUB_ABORT(sdt_early_init)
-STUB_ABORT(task_init)
-STUB_ABORT(vm_page_init_local_q)
-STUB_ABORT(bootprofile_init)
+void version_minor() {}
+void restartable_init() {}
+void clock_init() {}
+void kpc_init() {}
+void vnguard_policy_init() {}
+void coalitions_init() {}
+void PE_lockdown_iokit() {}
+void work_interval_subsystem_init() {}
+void kernel_do_post() {}
+void stack_alloc_try() {}
+void vm_commpage_init() {}
+void serial_keyboard_init() {}
+void stackshot_init() {}
+void task_threadmax() {}
+void version() {}
+void mach_init_activity_id() {}
+void current_processor() {}
+void telemetry_init() {}
+void vm_pageout() {}
+void sdt_early_init() {}
+void task_init() {}
+void vm_page_init_local_q() {}
+void bootprofile_init() {}
 
 struct machine_info machine_info;
 uint64_t max_mem_actual = 4000000;
 
-STUB_ABORT(thread_bind)
-STUB_ABORT(spinlock_timeout_panic)
-STUB_ABORT(sched_dualq_dispatch)
-STUB_ABORT(processor_state_update_explicit)
-STUB_ABORT(mapping_free_prime)
-STUB_ABORT(PE_parse_boot_arg_str)
-STUB_ABORT(timer_start)
-STUB_ABORT(atm_init)
-STUB_ABORT(version_major)
-STUB_ABORT(waitq_bootstrap)
-STUB_ABORT(sched_init)
-STUB_ABORT(kperf_init)
-STUB_ABORT(kernel_thread_create)
-STUB_ABORT(machine_set_current_thread)
-STUB_ABORT(idle_thread)
-STUB_ABORT(kasan_late_init)
-STUB_ABORT(thread_call_initialize)
-STUB_ABORT(clock_service_create)
-STUB_ABORT(ipc_thread_call_init)
-STUB_ABORT(corpses_init)
-STUB_ABORT(OSKextRemoveKextBootstrap)
-STUB_ABORT(bank_init)
-STUB_ABORT(kdebug_init)
-STUB_ABORT(vm_free_delayed_pages)
-STUB_ABORT(initialize_screen)
-STUB_ABORT(serverperfmode)
-STUB_ABORT(host_statistics_init)
+void thread_bind() {}
+void spinlock_timeout_panic() {}
+void sched_dualq_dispatch() {}
+void processor_state_update_explicit() {}
+void mapping_free_prime() {}
+void PE_parse_boot_arg_str() {}
+void timer_start() {}
+void atm_init() {}
+void version_major() {}
+void waitq_bootstrap() {}
+void sched_init() {}
+void kperf_init() {}
+void kernel_thread_create() {}
+void machine_set_current_thread() {}
+void idle_thread() {}
+void kasan_late_init() {}
+void thread_call_initialize() {}
+void clock_service_create() {}
+void ipc_thread_call_init() {}
+void corpses_init() {}
+void OSKextRemoveKextBootstrap() {}
+void bank_init() {}
+void kdebug_init() {}
+void vm_free_delayed_pages() {}
+void initialize_screen() {}
+void serverperfmode() {}
+void host_statistics_init() {}
 
 boolean_t doprnt_hide_pointers = true;
 
