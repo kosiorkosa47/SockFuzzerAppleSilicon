@@ -765,27 +765,32 @@ target_compile_options(
 # --------------------------------------------------------------------------
 # Unit tests
 # --------------------------------------------------------------------------
+# --------------------------------------------------------------------------
+# Unit tests — compile fakes directly (not linked against full libxnu)
+# --------------------------------------------------------------------------
 if(NOT DEFINED ENV{SANITIZER})
   enable_testing()
-  add_executable(fake_impls_test fuzz/fakes/fake_impls_test.cc)
-  target_compile_options(fake_impls_test PRIVATE -std=c++17 -g)
-  target_include_directories(fake_impls_test PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+
+  # Compile the fake implementation sources directly into the test binary
+  # instead of linking against libxnu_relocatable.o. This avoids symbol
+  # visibility issues and unresolved XNU-internal dependencies.
+  add_executable(fake_impls_test
+    fuzz/fakes/fake_impls_test.cc
+    fuzz/fakes/fake_impls.c
+    fuzz/fakes/zalloc.c
+    fuzz/fakes/thread.c
+  )
+  target_compile_options(fake_impls_test PRIVATE -std=c++17 -g
+    -Wno-implicit-function-declaration -Wno-incompatible-pointer-types
+  )
+  target_include_directories(fake_impls_test PRIVATE
+    ${CMAKE_CURRENT_BINARY_DIR}
+    ${BSD_INCLUDES}
+  )
   if(APPLE)
-    target_link_libraries(fake_impls_test
-      ${CMAKE_CURRENT_BINARY_DIR}/libxnu_relocatable.o
-      $<TARGET_OBJECTS:startup_trampoline>
-      protobuf-mutator ${Protobuf_LIBRARIES}
-      "-Wl,-undefined,dynamic_lookup"
-    )
-    add_dependencies(fake_impls_test xnu_obj)
+    target_link_libraries(fake_impls_test "-Wl,-undefined,dynamic_lookup")
   else()
-    target_compile_options(fake_impls_test PRIVATE -fsanitize=address,fuzzer-no-link)
-    target_link_libraries(fake_impls_test
-      -fsanitize=address
-      ${CMAKE_CURRENT_BINARY_DIR}/libxnu_relocatable.o
-      protobuf-mutator ${Protobuf_LIBRARIES} libbsd pthread
-    )
-    add_dependencies(fake_impls_test bsd osfmk)
+    target_link_libraries(fake_impls_test pthread)
   endif()
   add_test(NAME fake_impls_test COMMAND fake_impls_test)
 endif()
