@@ -143,9 +143,9 @@ jobs:
             if [ -f default.profraw ]; then
               llvm-profdata merge -sparse default.profraw -o default.profdata
               echo "=== Coverage Summary ==="
-              llvm-cov report -instr-profile=default.profdata net_cov 2>/dev/null | tee coverage_summary.txt
+              llvm-cov report -instr-profile=default.profdata net_cov | tee coverage_summary.txt
               llvm-cov show -format=html -output-dir=coverage_report \
-                -instr-profile=default.profdata net_cov 2>/dev/null
+                -instr-profile=default.profdata net_cov
             fi
           else
             echo "net_cov not built — skipping coverage"
