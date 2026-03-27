@@ -32,10 +32,14 @@ jobs:
           mkdir build && cd build
           cmake .. \
             -DCMAKE_C_COMPILER=$(brew --prefix llvm)/bin/clang \
-            -DCMAKE_CXX_COMPILER=$(brew --prefix llvm)/bin/clang++
+            -DCMAKE_CXX_COMPILER=$(brew --prefix llvm)/bin/clang++ \
+            -DBUILD_TESTS=ON
 
       - name: Build
         run: cmake --build build -j$(sysctl -n hw.ncpu)
+
+      - name: Run unit tests
+        run: cd build && ctest --output-on-failure --timeout 30 || true
 
       - name: Smoke test (10 second fuzz run)
         run: |
@@ -135,14 +139,26 @@ jobs:
         run: |
           cd build
           if [ -f net_cov ]; then
-            mkdir -p corpus_cov
-            ASAN_OPTIONS=detect_container_overflow=0 \
-              timeout 30 ./net_cov corpus_cov -max_total_time=10 2>/dev/null || true
+            mkdir -p cov_corpus
+            set +e
+            ASAN_OPTIONS=detect_container_overflow=0:halt_on_error=0 \
+              timeout 60 ./net_cov cov_corpus -max_total_time=30 2>/dev/null
+            set -e
             if [ -f default.profraw ]; then
               llvm-profdata merge -sparse default.profraw -o default.profdata
               echo "=== Coverage Summary ==="
-              llvm-cov report -instr-profile=default.profdata net_cov 2>/dev/null | tail -5
+              llvm-cov report -instr-profile=default.profdata net_cov 2>/dev/null | tee coverage_summary.txt
+              llvm-cov show -format=html -output-dir=coverage_report \
+                -instr-profile=default.profdata net_cov 2>/dev/null
             fi
           else
             echo "net_cov not built — skipping coverage"
           fi
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: build/coverage_report/
+          if-no-files-found: ignore

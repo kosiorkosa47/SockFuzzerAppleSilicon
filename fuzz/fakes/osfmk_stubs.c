@@ -33,6 +33,9 @@
 #include <stdbool.h>
 #include <vm/vm_kern.h>
 
+int printf(const char*, ...);
+#define STUB_ABORT(name) void name() { printf("STUB HIT: " #name "\n"); __builtin_trap(); }
+
 void kheap_startup_init() {}
 
 void zone_view_startup_init(struct zone_view_startup_spec *sp) {}
@@ -96,15 +99,16 @@ void lck_attr_free(lck_attr_t *attr) {}
 void lck_attr_setdebug(lck_attr_t *attr) {}
 
 OS_OVERLOADABLE
-uint64_t counter_load(unsigned long long **counter) { assert(false); }
+uint64_t counter_load(unsigned long long **counter) { printf("STUB HIT: counter_load\n"); assert(false); }
 
-int32_t sysctl_get_bound_cpuid(void) { assert(false); }
+int32_t sysctl_get_bound_cpuid(void) { printf("STUB HIT: sysctl_get_bound_cpuid\n"); assert(false); }
 
-kern_return_t sysctl_thread_bind_cpuid(int32_t cpuid) { assert(false); }
+kern_return_t sysctl_thread_bind_cpuid(int32_t cpuid) { printf("STUB HIT: sysctl_thread_bind_cpuid\n"); assert(false); }
 
 kern_return_t kernel_memory_allocate(vm_map_t map, vm_offset_t *addrp,
                                      vm_size_t size, vm_offset_t mask,
                                      kma_flags_t flags, vm_tag_t tag) {
+  printf("STUB HIT: kernel_memory_allocate\n");
   assert(false);
 }
 
@@ -126,111 +130,110 @@ btlog_t *
 btlog_create(size_t numrecords,
     size_t record_btdepth,
     boolean_t caller_will_remove_entries_for_element) {
+      printf("STUB HIT: btlog_create\n");
       assert(false);
     }
 
-void machine_init(void) { assert(false); }
+STUB_ABORT(machine_init)
+STUB_ABORT(device_service_create)
+STUB_ABORT(bsd_init)
 
-void device_service_create(void) { assert(false); }
+void slave_machine_init(__unused void *param) { printf("STUB HIT: slave_machine_init\n"); __builtin_trap(); }
 
-void bsd_init(void) { assert(false); }
-
-void slave_machine_init(__unused void *param) { assert(false); }
-
-void phys_carveout_init() { assert(false); }
-void hv_support_init() { assert(false); }
-void vm_mem_bootstrap() { assert(false); }
-void kdp_init() { assert(false); }
-void workq_init() { assert(false); }
-void machine_lockdown() { assert(false); }
-void thread_max() { assert(false); }
-void kperf_init_early() { assert(false); }
-void thread_daemon_init() { assert(false); }
-void mac_policy_initmach() { assert(false); }
-void vm_kernel_reserved_entry_init() { assert(false); }
-void kdebug_free_early_buf() { assert(false); }
-void turnstiles_init() { assert(false); }
-void vm_commpage_text_init() { assert(false); }
-void machine_load_context() { assert(false); }
-void ipc_pthread_priority_init() { assert(false); }
-void PE_i_can_has_debugger() { assert(false); }
-void sfi_init() { assert(false); }
-void dtrace_early_init() { assert(false); }
-void sched_startup() { assert(false); }
-void ml_get_interrupts_enabled() { assert(false); }
-void kernel_list_tests() { assert(false); }
-void thread_machine_init_template() { assert(false); }
-void task_max() { assert(false); }
-void thread_get_perfcontrol_class() { assert(false); }
-void ml_set_interrupts_enabled() { assert(false); }
-void processor_up() { assert(false); }
-void exception_init() { assert(false); }
-void vm_set_restrictions() { assert(false); }
-void thread_init() { assert(false); }
-void console_init() { assert(false); }
-void idle_thread_create() { assert(false); }
-void PE_init_iokit() { assert(false); }
-void mac_policy_init() { assert(false); }
-void bsd_scale_setup() { assert(false); }
-void mapping_adjust() { assert(false); }
-void trust_cache_init() { assert(false); }
+STUB_ABORT(phys_carveout_init)
+STUB_ABORT(hv_support_init)
+STUB_ABORT(vm_mem_bootstrap)
+STUB_ABORT(kdp_init)
+STUB_ABORT(workq_init)
+STUB_ABORT(machine_lockdown)
+STUB_ABORT(thread_max)
+STUB_ABORT(kperf_init_early)
+STUB_ABORT(thread_daemon_init)
+STUB_ABORT(mac_policy_initmach)
+STUB_ABORT(vm_kernel_reserved_entry_init)
+STUB_ABORT(kdebug_free_early_buf)
+STUB_ABORT(turnstiles_init)
+STUB_ABORT(vm_commpage_text_init)
+STUB_ABORT(machine_load_context)
+STUB_ABORT(ipc_pthread_priority_init)
+STUB_ABORT(PE_i_can_has_debugger)
+STUB_ABORT(sfi_init)
+STUB_ABORT(dtrace_early_init)
+STUB_ABORT(sched_startup)
+STUB_ABORT(ml_get_interrupts_enabled)
+STUB_ABORT(kernel_list_tests)
+STUB_ABORT(thread_machine_init_template)
+STUB_ABORT(task_max)
+STUB_ABORT(thread_get_perfcontrol_class)
+STUB_ABORT(ml_set_interrupts_enabled)
+STUB_ABORT(processor_up)
+STUB_ABORT(exception_init)
+STUB_ABORT(vm_set_restrictions)
+STUB_ABORT(thread_init)
+STUB_ABORT(console_init)
+STUB_ABORT(idle_thread_create)
+STUB_ABORT(PE_init_iokit)
+STUB_ABORT(mac_policy_init)
+STUB_ABORT(bsd_scale_setup)
+STUB_ABORT(mapping_adjust)
+STUB_ABORT(trust_cache_init)
 
 vm_size_t mem_size = 4000000;
 
-void version_minor() { assert(false); }
-void restartable_init() { assert(false); }
-void clock_init() { assert(false); }
-void kpc_init() { assert(false); }
-void vnguard_policy_init() { assert(false); }
-void coalitions_init() { assert(false); }
-void PE_lockdown_iokit() { assert(false); }
-void work_interval_subsystem_init() { assert(false); }
-void kernel_do_post() { assert(false); }
-void stack_alloc_try() { assert(false); }
-void vm_commpage_init() { assert(false); }
-void serial_keyboard_init() { assert(false); }
-void stackshot_init() { assert(false); }
-void task_threadmax() { assert(false); }
-void version() { assert(false); }
-void mach_init_activity_id() { assert(false); }
-void current_processor() { assert(false); }
-void telemetry_init() { assert(false); }
-void vm_pageout() { assert(false); }
-void sdt_early_init() { assert(false); }
-void task_init() { assert(false); }
-void vm_page_init_local_q() { assert(false); }
-void bootprofile_init() { assert(false); }
+STUB_ABORT(version_minor)
+STUB_ABORT(restartable_init)
+STUB_ABORT(clock_init)
+STUB_ABORT(kpc_init)
+STUB_ABORT(vnguard_policy_init)
+STUB_ABORT(coalitions_init)
+STUB_ABORT(PE_lockdown_iokit)
+STUB_ABORT(work_interval_subsystem_init)
+STUB_ABORT(kernel_do_post)
+STUB_ABORT(stack_alloc_try)
+STUB_ABORT(vm_commpage_init)
+STUB_ABORT(serial_keyboard_init)
+STUB_ABORT(stackshot_init)
+STUB_ABORT(task_threadmax)
+STUB_ABORT(version)
+STUB_ABORT(mach_init_activity_id)
+STUB_ABORT(current_processor)
+STUB_ABORT(telemetry_init)
+STUB_ABORT(vm_pageout)
+STUB_ABORT(sdt_early_init)
+STUB_ABORT(task_init)
+STUB_ABORT(vm_page_init_local_q)
+STUB_ABORT(bootprofile_init)
 
 struct machine_info machine_info;
 uint64_t max_mem_actual = 4000000;
 
-void thread_bind() { assert(false); }
-void spinlock_timeout_panic() { assert(false); }
-void sched_dualq_dispatch() { assert(false); }
-void processor_state_update_explicit() { assert(false); }
-void mapping_free_prime() { assert(false); }
-void PE_parse_boot_arg_str() { assert(false); }
-void timer_start() { assert(false); }
-void atm_init() { assert(false); }
-void version_major() { assert(false); }
-void waitq_bootstrap() { assert(false); }
-void sched_init() { assert(false); }
-void kperf_init() { assert(false); }
-void kernel_thread_create() { assert(false); }
-void machine_set_current_thread() { assert(false); }
-void idle_thread() { assert(false); }
-void kasan_late_init() { assert(false); }
-void thread_call_initialize() { assert(false); }
-void clock_service_create() { assert(false); }
-void ipc_thread_call_init() { assert(false); }
-void corpses_init() { assert(false); }
-void OSKextRemoveKextBootstrap() { assert(false); }
-void bank_init() { assert(false); }
-void kdebug_init() { assert(false); }
-void vm_free_delayed_pages() { assert(false); }
-void initialize_screen() { assert(false); }
-void serverperfmode() { assert(false); }
-void host_statistics_init() { assert(false); }
+STUB_ABORT(thread_bind)
+STUB_ABORT(spinlock_timeout_panic)
+STUB_ABORT(sched_dualq_dispatch)
+STUB_ABORT(processor_state_update_explicit)
+STUB_ABORT(mapping_free_prime)
+STUB_ABORT(PE_parse_boot_arg_str)
+STUB_ABORT(timer_start)
+STUB_ABORT(atm_init)
+STUB_ABORT(version_major)
+STUB_ABORT(waitq_bootstrap)
+STUB_ABORT(sched_init)
+STUB_ABORT(kperf_init)
+STUB_ABORT(kernel_thread_create)
+STUB_ABORT(machine_set_current_thread)
+STUB_ABORT(idle_thread)
+STUB_ABORT(kasan_late_init)
+STUB_ABORT(thread_call_initialize)
+STUB_ABORT(clock_service_create)
+STUB_ABORT(ipc_thread_call_init)
+STUB_ABORT(corpses_init)
+STUB_ABORT(OSKextRemoveKextBootstrap)
+STUB_ABORT(bank_init)
+STUB_ABORT(kdebug_init)
+STUB_ABORT(vm_free_delayed_pages)
+STUB_ABORT(initialize_screen)
+STUB_ABORT(serverperfmode)
+STUB_ABORT(host_statistics_init)
 
 boolean_t doprnt_hide_pointers = true;
 

@@ -981,8 +981,20 @@ enum TcpSeq {
   SEQ_MAX = -1;                 // 0xFFFFFFFF -- max uint32
 }
 
+enum TcpOptKind {
+  TCPOPT_EOL_K = 0;
+  TCPOPT_NOP_K = 1;
+  TCPOPT_MAXSEG_K = 2;
+  TCPOPT_WINDOW_K = 3;
+  TCPOPT_SACK_PERMITTED_K = 4;
+  TCPOPT_SACK_K = 5;
+  TCPOPT_TIMESTAMP_K = 8;
+  TCPOPT_MULTIPATH_K = 30;
+  TCPOPT_FASTOPEN_K = 34;
+}
+
 message TcpOption {
-  required uint32 kind = 1;  // TCPOPT_*
+  required TcpOptKind kind = 1;
   optional bytes data = 2;   // option payload (without kind/len bytes)
 }
 

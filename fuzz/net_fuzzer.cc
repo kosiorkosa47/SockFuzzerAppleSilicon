@@ -839,8 +839,6 @@ void DoIcmp6Input(const Icmp6Packet &icmp6_packet) {
 }
 
 void DoIpInput(const Packet &packet) {
-  // TODO: wire pkt.mbuf_layout() through to create_mbuf_for_packet()
-  // to enable mbuf chain fuzzing for injected packets.
   switch (packet.packet_case()) {
     case Packet::kTcpPacket: {
       DoTcpInput(packet.tcp_packet());
@@ -875,8 +873,17 @@ void DoIpInput(const Packet &packet) {
       break;
     }
     case Packet::kRawIp4: {
-      void *mbuf_data = get_mbuf_data(packet.raw_ip4().data(),
-                                      packet.raw_ip4().size(), PKTF_LOOP);
+      void *mbuf_data;
+      if (packet.has_mbuf_layout() && packet.mbuf_layout().split_points_size() > 0) {
+        std::vector<uint32_t> splits(packet.mbuf_layout().split_points().begin(),
+                                      packet.mbuf_layout().split_points().end());
+        mbuf_data = get_mbuf_data_chained(packet.raw_ip4().data(),
+                                           packet.raw_ip4().size(), PKTF_LOOP,
+                                           splits.data(), splits.size());
+      } else {
+        mbuf_data = get_mbuf_data(packet.raw_ip4().data(),
+                                  packet.raw_ip4().size(), PKTF_LOOP);
+      }
       if (!mbuf_data) {
         return;
       }
@@ -885,8 +892,17 @@ void DoIpInput(const Packet &packet) {
       break;
     }
     case Packet::kRawIp6: {
-      void *mbuf_data = get_mbuf_data(packet.raw_ip6().data(),
-                                      packet.raw_ip6().size(), PKTF_LOOP);
+      void *mbuf_data;
+      if (packet.has_mbuf_layout() && packet.mbuf_layout().split_points_size() > 0) {
+        std::vector<uint32_t> splits(packet.mbuf_layout().split_points().begin(),
+                                      packet.mbuf_layout().split_points().end());
+        mbuf_data = get_mbuf_data_chained(packet.raw_ip6().data(),
+                                           packet.raw_ip6().size(), PKTF_LOOP,
+                                           splits.data(), splits.size());
+      } else {
+        mbuf_data = get_mbuf_data(packet.raw_ip6().data(),
+                                  packet.raw_ip6().size(), PKTF_LOOP);
+      }
       if (!mbuf_data) {
         return;
       }
