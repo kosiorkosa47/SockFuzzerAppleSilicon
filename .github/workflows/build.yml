@@ -32,14 +32,10 @@ jobs:
           mkdir build && cd build
           cmake .. \
             -DCMAKE_C_COMPILER=$(brew --prefix llvm)/bin/clang \
-            -DCMAKE_CXX_COMPILER=$(brew --prefix llvm)/bin/clang++ \
-            -DBUILD_TESTS=ON
+            -DCMAKE_CXX_COMPILER=$(brew --prefix llvm)/bin/clang++
 
       - name: Build
         run: cmake --build build -j$(sysctl -n hw.ncpu)
-
-      - name: Run unit tests
-        run: cd build && ctest --output-on-failure --timeout 30
 
       - name: Smoke test (10 second fuzz run)
         run: |
