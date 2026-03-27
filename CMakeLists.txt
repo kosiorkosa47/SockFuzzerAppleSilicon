@@ -774,23 +774,24 @@ if(NOT DEFINED ENV{SANITIZER})
   # Compile the fake implementation sources directly into the test binary
   # instead of linking against libxnu_relocatable.o. This avoids symbol
   # visibility issues and unresolved XNU-internal dependencies.
-  add_executable(fake_impls_test
-    fuzz/fakes/fake_impls_test.cc
+  # Build fake implementation C sources as a static lib with XNU includes.
+  add_library(fakes_for_test STATIC
     fuzz/fakes/fake_impls.c
     fuzz/fakes/zalloc.c
     fuzz/fakes/thread.c
   )
-  target_compile_options(fake_impls_test PRIVATE -std=c++17 -g
-    -Wno-implicit-function-declaration -Wno-incompatible-pointer-types
-  )
-  target_include_directories(fake_impls_test PRIVATE
-    ${CMAKE_CURRENT_BINARY_DIR}
-    ${BSD_INCLUDES}
-  )
+  target_include_directories(fakes_for_test PRIVATE ${BSD_INCLUDES})
+  target_compile_options(fakes_for_test PRIVATE ${XNU_C_FLAGS} ${BSD_DEFINES})
+
+  # Build the C++ test binary linking against the fakes lib.
+  add_executable(fake_impls_test fuzz/fakes/fake_impls_test.cc)
+  target_compile_options(fake_impls_test PRIVATE -std=c++17 -g)
+  target_include_directories(fake_impls_test PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
   if(APPLE)
-    target_link_libraries(fake_impls_test "-Wl,-undefined,dynamic_lookup")
+    target_link_libraries(fake_impls_test fakes_for_test
+      "-Wl,-undefined,dynamic_lookup")
   else()
-    target_link_libraries(fake_impls_test pthread)
+    target_link_libraries(fake_impls_test fakes_for_test pthread)
   endif()
   add_test(NAME fake_impls_test COMMAND fake_impls_test)
 endif()
