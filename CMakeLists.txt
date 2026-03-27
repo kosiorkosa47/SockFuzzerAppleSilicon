@@ -865,13 +865,16 @@ if(NOT DEFINED ENV{SANITIZER} AND NOT APPLE)
                       -fprofile-instr-generate -fcoverage-mapping
   )
 
-  add_library(bsd_cov STATIC ${BSD_SOURCES} ${FUZZER_SOURCES} $<TARGET_OBJECTS:osfmk_cov>)
+  # Coverage build does NOT use ASAN/KASAN — only source-based coverage.
+  # Including FUZZER_SOURCES (san.c) would inject __asan_* calls that
+  # the coverage binary can't resolve (no ASAN runtime linked).
+  add_library(bsd_cov STATIC ${BSD_SOURCES} $<TARGET_OBJECTS:osfmk_cov>)
   target_include_directories(bsd_cov PRIVATE ${BSD_INCLUDES})
   set_target_properties(bsd_cov PROPERTIES C_VISIBILITY_PRESET hidden)
   target_compile_options(
     bsd_cov
     PRIVATE ${XNU_C_FLAGS} ${BSD_DEFINES} ${SAN_DEFINES} -DLIBXNU_BUILD=1
-            ${FUZZER_DEFINES} -fprofile-instr-generate -fcoverage-mapping
+            -fprofile-instr-generate -fcoverage-mapping
   )
 
   add_custom_command(
