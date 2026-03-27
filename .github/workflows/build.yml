@@ -43,9 +43,12 @@ jobs:
           mkdir -p corpus crashes
           TIMEOUT_CMD="timeout"
           command -v gtimeout >/dev/null 2>&1 && TIMEOUT_CMD="gtimeout"
+          set +e
           ASAN_OPTIONS=detect_container_overflow=0:halt_on_error=0 \
             $TIMEOUT_CMD 10 ./net_fuzzer corpus/ -artifact_prefix=crashes/ \
-            -max_total_time=5 2>&1; EXIT_CODE=$?
+            -max_total_time=5 2>&1
+          EXIT_CODE=$?
+          set -e
           # Exit codes: 0=clean, 124=timeout(expected), 77=XNU assert(finding)
           if [ "$EXIT_CODE" -ne 0 ] && [ "$EXIT_CODE" -ne 124 ] && [ "$EXIT_CODE" -ne 77 ]; then
             echo "FAIL: fuzzer exited with code $EXIT_CODE"
