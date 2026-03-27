@@ -116,13 +116,13 @@ message SockAddrGeneric {
 }
 
 message SockAddr4 {
-  required Domain sin_family = 1;
+  optional Domain sin_family = 1;  // Hardcoded AF_INET by harness
   required Port sin_port = 2;
   required InAddr sin_addr = 3;
 }
 
 message SockAddr6 {
-  required Domain family = 1;
+  optional Domain family = 1;  // Hardcoded AF_INET6 by harness
   required Port port = 2;
   required FlowInfo flow_info = 3;
   required In6Addr sin6_addr = 4;
@@ -267,6 +267,7 @@ message Command {
     // Novel subsystems beyond P0 scope (#89)
     ContentFilterAttach cfil_attach = 47;
     FlowDivertConnect flow_divert_connect = 48;
+    Kevent kevent_cmd = 49;
   }
 }
 
@@ -287,6 +288,40 @@ message FlowDivertConnect {
 
 // --- kqueue (B4) ---
 message Kqueue {}
+
+// --- kevent (B4 extension) ---
+enum KevFilter {
+  EVFILT_READ_K = -1;
+  EVFILT_WRITE_K = -2;
+  EVFILT_AIO_K = -3;
+  EVFILT_VNODE_K = -4;
+  EVFILT_PROC_K = -5;
+  EVFILT_SIGNAL_K = -6;
+  EVFILT_TIMER_K = -7;
+  EVFILT_EXCEPT_K = -15;
+  EVFILT_SOCK_K = -14;
+}
+
+enum KevAction {
+  EV_ADD_K = 1;
+  EV_DELETE_K = 2;
+  EV_ENABLE_K = 4;
+  EV_DISABLE_K = 8;
+  EV_ONESHOT_K = 16;
+  EV_CLEAR_K = 32;
+}
+
+message KevChange {
+  required FileDescriptor ident = 1;
+  required KevFilter filter = 2;
+  repeated KevAction flags = 3;
+}
+
+message Kevent {
+  required FileDescriptor kq = 1;
+  repeated KevChange changes = 2;
+  optional uint32 nevents = 3;
+}
 
 // --- TCP state machine aware grammar (F1) ---
 // Pre-built sequences that walk through specific TCP states.
@@ -1003,10 +1038,10 @@ message TcpHdr {
   required Port th_dport = 2;
   required TcpSeq th_seq = 3;
   required TcpSeq th_ack = 4;
-  required uint32 th_off = 5;
+  optional uint32 th_off = 5;  // Computed from header+options size
   repeated TcpFlag th_flags = 6;
   required uint32 th_win = 7;
-  required uint32 th_sum = 8;
+  optional uint32 th_sum = 8;  // Zeroed (kernel computes checksum)
   required uint32 th_urp = 9;
   // Ned's extensions
   required bool is_pure_syn = 10;
@@ -1036,10 +1071,10 @@ message IpHdr {
   // NOTE: ip_hl, ip_v, ip_len, and ip_sum are computed by get_ip_hdr()
   // and override any values set here. They are kept as proto fields for
   // potential future use (e.g., testing with malformed headers).
-  required uint32 ip_hl = 1;
-  required IpVersion ip_v = 2;
+  optional uint32 ip_hl = 1;  // Computed by get_ip_hdr unless malform_header=true
+  optional IpVersion ip_v = 2;  // Computed
   required uint32 ip_tos = 3;
-  required uint32 ip_len = 4;
+  optional uint32 ip_len = 4;  // Computed
   required uint32 ip_id = 5;
   required uint32 ip_off = 6;
   required uint32 ip_ttl = 7;

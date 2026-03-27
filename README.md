@@ -169,9 +169,22 @@ llvm-cov report -instr-profile=default.profdata net_cov  # summary table
 | Socket lifecycle | uipc_socket, uipc_socket2, uipc_syscalls | Active |
 | UNIX domain | uipc_usrreq | Active — structured paths |
 | Pipes | sys_pipe | Active |
-| kqueue | kern_event | Planned |
+| kqueue | kern_event | Active — kevent64 syscall wired |
 | Content filter | content_filter | Planned |
 | Flow divert | flow_divert | Planned |
+
+### Fuzzer Performance
+
+Measured on Apple M3 Pro, 60-second campaign:
+
+| Metric | Value |
+|---|---|
+| Executions | 608,985 |
+| Exec/sec | ~10,000 |
+| Edge coverage | 10,587 |
+| Feature coverage | ~37,000 |
+| Peak RSS | 111 MB |
+| Corpus size | 1,765 files |
 
 ## Comparison with Other Tools
 

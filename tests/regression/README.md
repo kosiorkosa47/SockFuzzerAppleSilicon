@@ -15,9 +15,10 @@ Each CVE directory contains:
 | CVE | Function | File | Bug Class | In Sources? |
 |-----|----------|------|-----------|-------------|
 | CVE-2019-8605 | `in6_pcbdetach` | bsd/netinet6/in6_pcb.c | UAF | Yes |
+| CVE-2020-3911 | `frag6_input` | bsd/netinet6/frag6.c | Heap overflow | Yes |
 | CVE-2020-9839 | `tcp_input` | bsd/netinet/tcp_input.c | OOB read | Yes |
 | CVE-2021-1782 | `mptcp_usr_connectx` | bsd/netinet/mptcp_usrreq.c | Race | Yes |
-| CVE-2022-32893 | Various | Multiple | Multiple | Check |
+| CVE-2022-32893 | `pf_test_rule` | bsd/net/pf.c | Memory corruption | Yes |
 | CVE-2023-42824 | Various | Multiple | Multiple | Check |
 
 ## Running Regression Tests

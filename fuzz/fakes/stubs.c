@@ -61,23 +61,23 @@ void Assert(const char* file, int line, const char* expression) {
   _exit(77);  // Clean exit — libFuzzer logs the crash input without SIGABRT noise
 }
 
-STUB_ABORT(IOBSDGetPlatformUUID)
+void IOBSDGetPlatformUUID() {}
 
-STUB_ABORT(IOMapperInsertPage)
+void IOMapperInsertPage() {}
 
-STUB_ABORT(IOPMCopySleepWakeUUIDKey)
+void IOPMCopySleepWakeUUIDKey() {}
 
-STUB_ABORT(IOTaskHasEntitlement)
+void IOTaskHasEntitlement() {}
 
-STUB_ABORT(OSMalloc_Tagalloc)
+void OSMalloc_Tagalloc() {}
 
-STUB_ABORT(OSMalloc_Tagfree)
+void OSMalloc_Tagfree() {}
 
-STUB_ABORT(act_set_astbsd)
+void act_set_astbsd() {}
 
-STUB_ABORT(act_set_astkevent)
+void act_set_astkevent() {}
 
-STUB_ABORT(addupc_task)
+void addupc_task() {}
 
 int assert_wait() { return 0; }
 
@@ -92,18 +92,18 @@ void audit_arg_signum() {}
 void audit_arg_value64() {}
 void audit_syscalls() {}
 
-STUB_ABORT(bsd_exception)
+void bsd_exception() {}
 
-STUB_ABORT(bsd_timeout)
+void bsd_timeout() {}
 
-STUB_ABORT(bsdinit_task)
+void bsdinit_task() {}
 
 int cc_rand_generate(void *out, size_t outlen) {
   get_fuzzed_bytes(out, outlen);
   return 0;
 }
 
-STUB_ABORT(check_actforsig)
+void check_actforsig() {}
 
 void clear_thread_rwlock_boost() {}
 
@@ -130,11 +130,11 @@ void clock_get_calendar_nanotime(void *secs, void *nanosecs) {
 }
 
 
-STUB_ABORT(coalition_get_leader)
+void coalition_get_leader() {}
 
-STUB_ABORT(coalition_is_leader)
+void coalition_is_leader() {}
 
-STUB_ABORT(copyin_word)
+void copyin_word() {}
 
 int copyinstr(const void *uaddr, void *kaddr, size_t len, size_t *done) {
   if (len == 0) { if (done) *done = 0; return 0; }
@@ -144,13 +144,13 @@ int copyinstr(const void *uaddr, void *kaddr, size_t len, size_t *done) {
   return 0;
 }
 
-STUB_ABORT(copypv)
+void copypv() {}
 
-STUB_ABORT(copywithin)
+void copywithin() {}
 
-STUB_ABORT(coredump)
+void coredump() {}
 
-STUB_ABORT(cs_identity_get)
+void cs_identity_get() {}
 
 void* current_task() { return (void*)1; }
 
@@ -158,30 +158,30 @@ int deflate(void *strm, int flush) { return 1; /* Z_STREAM_END */ }
 
 int deflateReset(void *strm) { return 0; }
 
-STUB_ABORT(enodev)
+void enodev() {}
 
-STUB_ABORT(enodev_strat)
+void enodev_strat() {}
 
-STUB_ABORT(exit_with_reason)
+void exit_with_reason() {}
 
-STUB_ABORT(fs_filtops)
+void fs_filtops() {}
 
-STUB_ABORT(fsevent_filtops)
+void fsevent_filtops() {}
 
-STUB_ABORT(fuulong)
+void fuulong() {}
 
-STUB_ABORT(gPEClockFrequencyInfo)
+void gPEClockFrequencyInfo() {}
 
 void* g_crypto_funcs = NULL;
 
 void* get_bsdtask_info() { extern char fake_uthread[]; return fake_uthread; }
 void* get_bsdthreadtask_info() { extern char fake_uthread[]; return fake_uthread; }
 
-STUB_ABORT(get_signalact)
+void get_signalact() {}
 
-STUB_ABORT(get_threadtask)
+void get_threadtask() {}
 
-STUB_ABORT(get_useraddr)
+void get_useraddr() {}
 
 uint32_t hashaddr() { return 0; }
 uint32_t hashbacktrace() { return 0; }
@@ -192,7 +192,7 @@ int inflate(void *strm, int flush) { return 1; /* Z_STREAM_END */ }
 
 int inflateReset(void *strm) { return 0; }
 
-STUB_ABORT(initproc)
+void initproc() {}
 
 unsigned int ipc_entry_name_mask = 0;
 int is_kerneltask() { return 1; }
@@ -204,77 +204,77 @@ int kauth_cred_getruid() { return 0; }
 int kauth_cred_getsvuid() { return 0; }
 int kauth_getruid() { return 0; }
 
-STUB_ABORT(kcdata_estimate_required_buffer_size)
+void kcdata_estimate_required_buffer_size() {}
 
-STUB_ABORT(kcdata_get_memory_addr)
+void kcdata_get_memory_addr() {}
 
-STUB_ABORT(kcdata_memcpy)
+void kcdata_memcpy() {}
 
-STUB_ABORT(kcdata_memory_static_init)
+void kcdata_memory_static_init() {}
 
-STUB_ABORT(kdp_get_interface)
+void kdp_get_interface() {}
 
-STUB_ABORT(kdp_is_in_zone)
+void kdp_is_in_zone() {}
 
-STUB_ABORT(kdp_set_gateway_mac)
+void kdp_set_gateway_mac() {}
 
-STUB_ABORT(kdp_set_ip_and_mac_addresses)
+void kdp_set_ip_and_mac_addresses() {}
 
-STUB_ABORT(kernel_debug_filtered)
+void kernel_debug_filtered() {}
 
-STUB_ABORT(kernel_task)
+void kernel_task() {}
 
-STUB_ABORT(launchd_exit_reason_get_string_desc)
+void launchd_exit_reason_get_string_desc() {}
 
-STUB_ABORT(lck_mtx_lock_spin_always)
+void lck_mtx_lock_spin_always() {}
 
-STUB_ABORT(lck_rw_destroy)
+void lck_rw_destroy() {}
 
-STUB_ABORT(lck_rw_lock_exclusive_to_shared)
+void lck_rw_lock_exclusive_to_shared() {}
 
-STUB_ABORT(lck_rw_lock_shared_to_exclusive)
+void lck_rw_lock_shared_to_exclusive() {}
 
-STUB_ABORT(lck_rw_sleep)
+void lck_rw_sleep() {}
 
-STUB_ABORT(lck_spin_assert)
+void lck_spin_assert() {}
 
-STUB_ABORT(lck_spin_destroy)
+void lck_spin_destroy() {}
 
-STUB_ABORT(ledger_get_task_entry_info_multiple)
+void ledger_get_task_entry_info_multiple() {}
 
-STUB_ABORT(ledger_info)
+void ledger_info() {}
 
-STUB_ABORT(ledger_template_info)
+void ledger_template_info() {}
 
-STUB_ABORT(mac_error_select)
+void mac_error_select() {}
 
-STUB_ABORT(mac_policy_list)
+void mac_policy_list() {}
 
-STUB_ABORT(mac_policy_list_conditional_busy)
+void mac_policy_list_conditional_busy() {}
 
-STUB_ABORT(mac_policy_list_unbusy)
+void mac_policy_list_unbusy() {}
 
-STUB_ABORT(mac_proc_check_ledger)
+void mac_proc_check_ledger() {}
 
-STUB_ABORT(mac_proc_check_signal)
+void mac_proc_check_signal() {}
 
-STUB_ABORT(mac_socket_check_received)
+void mac_socket_check_received() {}
 
-STUB_ABORT(mac_socket_check_stat)
+void mac_socket_check_stat() {}
 
-STUB_ABORT(mac_system_enforce)
+void mac_system_enforce() {}
 
-STUB_ABORT(mach_absolutetime_asleep)
+void mach_absolutetime_asleep() {}
 
-STUB_ABORT(machport_filtops)
+void machport_filtops() {}
 
-STUB_ABORT(max_mem)
+void max_mem() {}
 
-STUB_ABORT(mb_map)
+void mb_map() {}
 
-STUB_ABORT(memorystatus_filtops)
+void memorystatus_filtops() {}
 
-STUB_ABORT(memorystatus_kevent_init)
+void memorystatus_kevent_init() {}
 
 int msleep(void *chan, void *mtx, int pri, const char *wmesg, void *ts) {
   return 0;  // Simulate immediate wakeup
@@ -296,89 +296,89 @@ void nanotime(void *ts) {
   f[1] = (long)(g_fake_time_counter % 1000000000ULL);
 }
 
-STUB_ABORT(pg_rele)
+void pg_rele() {}
 
-STUB_ABORT(pgfind)
+void pgfind() {}
 
-STUB_ABORT(pgrp_iterate)
+void pgrp_iterate() {}
 
-STUB_ABORT(port_name_to_thread)
+void port_name_to_thread() {}
 
-STUB_ABORT(proc_get_effective_task_policy)
+void proc_get_effective_task_policy() {}
 
-STUB_ABORT(proc_getcdhash)
+void proc_getcdhash() {}
 
-STUB_ABORT(proc_iterate)
+void proc_iterate() {}
 
-STUB_ABORT(proc_klist_lock)
+void proc_klist_lock() {}
 
-STUB_ABORT(proc_klist_unlock)
+void proc_klist_unlock() {}
 
-STUB_ABORT(proc_knote)
+void proc_knote() {}
 
-STUB_ABORT(proc_list_lock)
+void proc_list_lock() {}
 
-STUB_ABORT(proc_list_unlock)
+void proc_list_unlock() {}
 
-STUB_ABORT(proc_lock)
+void proc_lock() {}
 
-STUB_ABORT(proc_log_32bit_telemetry)
+void proc_log_32bit_telemetry() {}
 
-STUB_ABORT(proc_name_address)
+void proc_name_address() {}
 
-STUB_ABORT(proc_parentdropref)
+void proc_parentdropref() {}
 
-STUB_ABORT(proc_parentholdref)
+void proc_parentholdref() {}
 
-STUB_ABORT(proc_pgrp)
+void proc_pgrp() {}
 
-STUB_ABORT(proc_self)
+void proc_self() {}
 
-STUB_ABORT(proc_set_thread_policy)
+void proc_set_thread_policy() {}
 
-STUB_ABORT(proc_signal)
+void proc_signal() {}
 
-STUB_ABORT(proc_spinlock)
+void proc_spinlock() {}
 
-STUB_ABORT(proc_spinunlock)
+void proc_spinunlock() {}
 
-STUB_ABORT(proc_unlock)
+void proc_unlock() {}
 
-STUB_ABORT(proc_uuid_policy_kernel)
+void proc_uuid_policy_kernel() {}
 
-STUB_ABORT(proc_uuid_policy_lookup)
+void proc_uuid_policy_lookup() {}
 
-STUB_ABORT(pthread_functions)
+void pthread_functions() {}
 
-STUB_ABORT(pthread_priority_canonicalize)
+void pthread_priority_canonicalize() {}
 
-STUB_ABORT(ptmx_kqops)
+void ptmx_kqops() {}
 
-STUB_ABORT(ptsd_kqops)
+void ptsd_kqops() {}
 
-STUB_ABORT(pzfind)
+void pzfind() {}
 
-STUB_ABORT(sane_size)
+void sane_size() {}
 
-STUB_ABORT(securelevel)
+void securelevel() {}
 
-STUB_ABORT(semaphore_timedwait_signal_trap_internal)
+void semaphore_timedwait_signal_trap_internal() {}
 
-STUB_ABORT(semaphore_timedwait_trap_internal)
+void semaphore_timedwait_trap_internal() {}
 
-STUB_ABORT(semaphore_wait_signal_trap_internal)
+void semaphore_wait_signal_trap_internal() {}
 
-STUB_ABORT(semaphore_wait_trap_internal)
+void semaphore_wait_trap_internal() {}
 
-STUB_ABORT(sendsig)
+void sendsig() {}
 
 void set_thread_rwlock_boost() {}
 
-STUB_ABORT(spec_filtops)
+void spec_filtops() {}
 
-STUB_ABORT(subyte)
+void subyte() {}
 
-STUB_ABORT(suulong)
+void suulong() {}
 
 // Sysctl node arrays — the real kernel populates these via linker sets.
 // We provide empty arrays so sysctl registration doesn't crash.
@@ -391,100 +391,100 @@ struct sysctl_oid_stub sysctl__net_children[1] = {};
 struct sysctl_oid_stub sysctl__net_link_generic_system_children[1] = {};
 struct sysctl_oid_stub sysctl__sysctl_children[1] = {};
 
-STUB_ABORT(task_consume_32bit_log_flag)
+void task_consume_32bit_log_flag() {}
 
-STUB_ABORT(task_deallocate)
+void task_deallocate() {}
 
-STUB_ABORT(task_did_exec)
+void task_did_exec() {}
 
-STUB_ABORT(task_hold)
+void task_hold() {}
 
-STUB_ABORT(task_is_active)
+void task_is_active() {}
 
-STUB_ABORT(task_is_exec_copy)
+void task_is_exec_copy() {}
 
-STUB_ABORT(task_is_halting)
+void task_is_halting() {}
 
-STUB_ABORT(task_release)
+void task_release() {}
 
-STUB_ABORT(task_resume_internal)
+void task_resume_internal() {}
 
-STUB_ABORT(task_suspend_internal)
+void task_suspend_internal() {}
 
-STUB_ABORT(task_vtimer_clear)
+void task_vtimer_clear() {}
 
-STUB_ABORT(task_vtimer_set)
+void task_vtimer_set() {}
 
-STUB_ABORT(task_vtimer_update)
+void task_vtimer_update() {}
 
-STUB_ABORT(task_wait)
+void task_wait() {}
 
-STUB_ABORT(telemetry_timer_event)
+void telemetry_timer_event() {}
 
-STUB_ABORT(thread_add_ipc_override)
+void thread_add_ipc_override() {}
 
-STUB_ABORT(thread_add_sync_ipc_override)
+void thread_add_sync_ipc_override() {}
 
 int thread_block() { return 0; }
 
 int thread_block_parameter() { return 0; }
 
-STUB_ABORT(thread_call_cancel)
+void thread_call_cancel() {}
 
-STUB_ABORT(thread_call_cancel_wait)
+void thread_call_cancel_wait() {}
 
-STUB_ABORT(thread_call_enter)
+void thread_call_enter() {}
 
-STUB_ABORT(thread_call_free)
+void thread_call_free() {}
 
-STUB_ABORT(thread_call_func_cancel)
+void thread_call_func_cancel() {}
 
-STUB_ABORT(thread_call_func_delayed)
+void thread_call_func_delayed() {}
 
-STUB_ABORT(thread_call_isactive)
+void thread_call_isactive() {}
 
-STUB_ABORT(thread_drop_ipc_override)
+void thread_drop_ipc_override() {}
 
-STUB_ABORT(thread_drop_sync_ipc_override)
+void thread_drop_sync_ipc_override() {}
 
-STUB_ABORT(thread_ends_owning_workloop)
+void thread_ends_owning_workloop() {}
 
-STUB_ABORT(thread_get_ipc_override)
+void thread_get_ipc_override() {}
 
-STUB_ABORT(thread_get_tag)
+void thread_get_tag() {}
 
-STUB_ABORT(thread_handoff)
+void thread_handoff() {}
 
-STUB_ABORT(thread_owned_workloops_count)
+void thread_owned_workloops_count() {}
 
-STUB_ABORT(thread_qos_from_pthread_priority)
+void thread_qos_from_pthread_priority() {}
 
-STUB_ABORT(thread_reference)
+void thread_reference() {}
 
-STUB_ABORT(thread_rettokern_addr)
+void thread_rettokern_addr() {}
 
-STUB_ABORT(thread_set_pending_block_hint)
+void thread_set_pending_block_hint() {}
 
-STUB_ABORT(thread_set_thread_name)
+void thread_set_thread_name() {}
 
-STUB_ABORT(thread_set_voucher_name)
+void thread_set_voucher_name() {}
 
-STUB_ABORT(thread_should_abort)
+void thread_should_abort() {}
 
-STUB_ABORT(thread_should_halt)
+void thread_should_halt() {}
 
-STUB_ABORT(thread_starts_owning_workloop)
+void thread_starts_owning_workloop() {}
 
-STUB_ABORT(thread_tid)
+void thread_tid() {}
 
-STUB_ABORT(thread_update_ipc_override)
+void thread_update_ipc_override() {}
 
 void thread_wakeup_thread() {}
 int tick = 10000;
 
-STUB_ABORT(timeout_with_leeway)
+void timeout_with_leeway() {}
 
-STUB_ABORT(timespec_is_valid)
+void timespec_is_valid() {}
 
 int tsleep() { return 0; }
 
@@ -492,23 +492,23 @@ int tsleep0() { return 0; }
 
 int tsleep1() { return 0; }
 
-STUB_ABORT(tstoabstime)
+void tstoabstime() {}
 
-STUB_ABORT(tty_filtops)
+void tty_filtops() {}
 
-STUB_ABORT(tty_pgrp)
+void tty_pgrp() {}
 
-STUB_ABORT(tvtoabstime)
+void tvtoabstime() {}
 
-STUB_ABORT(unix_syscall_return)
+void unix_syscall_return() {}
 
-STUB_ABORT(untimeout)
+void untimeout() {}
 
-STUB_ABORT(vaddlog)
+void vaddlog() {}
 
-STUB_ABORT(vfs_context_create)
+void vfs_context_create() {}
 
-STUB_ABORT(vfs_context_rele)
+void vfs_context_rele() {}
 
 STUB_ABORT(vm_kernel_slid_base)
 
@@ -516,98 +516,98 @@ STUB_ABORT(vm_kernel_slid_top)
 
 STUB_ABORT(vm_kernel_slide)
 
-STUB_ABORT(vn_stat)
+void vn_stat() {}
 
-STUB_ABORT(vnode_filtops)
+void vnode_filtops() {}
 
-STUB_ABORT(vnode_isfifo)
+void vnode_isfifo() {}
 
-STUB_ABORT(waitq_assert_wait64)
+void waitq_assert_wait64() {}
 
-STUB_ABORT(waitq_assert_wait64_leeway)
+void waitq_assert_wait64_leeway() {}
 
-STUB_ABORT(waitq_clear_prepost)
+void waitq_clear_prepost() {}
 
-STUB_ABORT(waitq_deinit)
+void waitq_deinit() {}
 
-STUB_ABORT(waitq_get_prepost_id)
+void waitq_get_prepost_id() {}
 
-STUB_ABORT(waitq_init)
+void waitq_init() {}
 
-STUB_ABORT(waitq_is_valid)
+void waitq_is_valid() {}
 
-STUB_ABORT(waitq_link)
+void waitq_link() {}
 
-STUB_ABORT(waitq_link_release)
+void waitq_link_release() {}
 
-STUB_ABORT(waitq_link_reserve)
+void waitq_link_reserve() {}
 
-STUB_ABORT(waitq_set_alloc)
+void waitq_set_alloc() {}
 
-STUB_ABORT(waitq_set_clear_preposts)
+void waitq_set_clear_preposts() {}
 
-STUB_ABORT(waitq_set_deinit)
+void waitq_set_deinit() {}
 
-STUB_ABORT(waitq_set_init)
+void waitq_set_init() {}
 
-STUB_ABORT(waitq_set_is_valid)
+void waitq_set_is_valid() {}
 
-STUB_ABORT(waitq_set_unlink_all)
+void waitq_set_unlink_all() {}
 
-STUB_ABORT(waitq_unlink)
+void waitq_unlink() {}
 
-STUB_ABORT(waitq_unlink_by_prepost_id)
+void waitq_unlink_by_prepost_id() {}
 
-STUB_ABORT(waitq_wakeup64_all)
+void waitq_wakeup64_all() {}
 
-STUB_ABORT(waitq_wakeup64_one)
+void waitq_wakeup64_one() {}
 
-STUB_ABORT(wqset_id)
+void wqset_id() {}
 
-STUB_ABORT(wqset_waitq)
+void wqset_waitq() {}
 
-STUB_ABORT(zalloc_canblock)
+void zalloc_canblock() {}
 
-STUB_ABORT(zfill)
+void zfill() {}
 
 STUB_ABORT(kernel_pmap)
 
-STUB_ABORT(kmem_free)
+void kmem_free() {}
 
-STUB_ABORT(cru2x)
+void cru2x() {}
 
-STUB_ABORT(mac_vnode_check_create)
+void mac_vnode_check_create() {}
 
-STUB_ABORT(mac_vnode_check_uipc_bind)
+void mac_vnode_check_uipc_bind() {}
 
-STUB_ABORT(mac_vnode_check_uipc_connect)
+void mac_vnode_check_uipc_connect() {}
 
-STUB_ABORT(namei)
+void namei() {}
 
-STUB_ABORT(nameidone)
+void nameidone() {}
 
-STUB_ABORT(vfs_context_ucred)
+void vfs_context_ucred() {}
 
-STUB_ABORT(vn_create)
+void vn_create() {}
 
-STUB_ABORT(vnode_authorize)
+void vnode_authorize() {}
 
-STUB_ABORT(vnode_put)
+void vnode_put() {}
 
-STUB_ABORT(vnode_ref)
+void vnode_ref() {}
 
-STUB_ABORT(vnode_rele)
+void vnode_rele() {}
 
 void audit_arg_sockaddr() {}
 void audit_arg_socket() {}
 
-STUB_ABORT(audit_arg_value32)
+void audit_arg_value32() {}
 
-STUB_ABORT(vfs_context_cwd)
+void vfs_context_cwd() {}
 
-STUB_ABORT(vnode_isreg)
+void vnode_isreg() {}
 
-STUB_ABORT(vnode_size)
+void vnode_size() {}
 
 int aes_decrypt_aad_gcm() { return 0; }
 
@@ -643,7 +643,7 @@ int aes_encrypt_key_with_iv_gcm() { return 0; }
 
 int aes_encrypt_reset_gcm() { return 0; }
 
-STUB_ABORT(thread_call_enter1_delayed)
+void thread_call_enter1_delayed() {}
 
 void panic(const char *fmt, ...) {
   printf("KERNEL PANIC: ");
@@ -679,208 +679,208 @@ int cc_cmp_safe(size_t num, const void *ptr1, const void *ptr2) {
   return memcmp(ptr1, ptr2, num);
 }
 
-STUB_ABORT(getsectdatafromheader)
+void getsectdatafromheader() {}
 
 /* On macOS, _mh_execute_header is provided by the linker automatically. */
 #ifndef __APPLE__
-STUB_ABORT(_mh_execute_header)
+void _mh_execute_header() {}
 #endif
 
 uint32_t net_flowhash(const void *key, uint32_t len, const uint32_t seed) {
   return net_flowhash_mh3_x86_32(key, len, seed);
 }
 
-STUB_ABORT(os_cpu_in_cksum)
+void os_cpu_in_cksum() {}
 
-STUB_ABORT(os_cpu_in_cksum_mbuf)
+void os_cpu_in_cksum_mbuf() {}
 
-STUB_ABORT(proc_name)
+void proc_name() {}
 
-STUB_ABORT(thread_terminate)
+void thread_terminate() {}
 
-STUB_ABORT(uuid_generate)
+void uuid_generate() {}
 
-STUB_ABORT(uuid_parse)
+void uuid_parse() {}
 
-STUB_ABORT(_pthread_priority_normalize)
+void _pthread_priority_normalize() {}
 
-STUB_ABORT(workq_kern_threadreq_modify)
+void workq_kern_threadreq_modify() {}
 
-STUB_ABORT(nat464_translate_proto)
+void nat464_translate_proto() {}
 
-STUB_ABORT(turnstile_cleanup)
+void turnstile_cleanup() {}
 
 void thread_wakeup_prim() {}
 
-STUB_ABORT(waitq_wakeup64_thread)
+void waitq_wakeup64_thread() {}
 
-STUB_ABORT(turnstile_prepare)
+void turnstile_prepare() {}
 
 int assert_wait_deadline() { return 0; }
 
-STUB_ABORT(nat464_synthesize_ipv4)
+void nat464_synthesize_ipv4() {}
 
-STUB_ABORT(clat_debug)
+void clat_debug() {}
 
-STUB_ABORT(workq_kern_threadreq_redrive)
+void workq_kern_threadreq_redrive() {}
 
-STUB_ABORT(zdestroy)
+void zdestroy() {}
 
-STUB_ABORT(turnstile_update_inheritor)
+void turnstile_update_inheritor() {}
 
-STUB_ABORT(thread_handoff_parameter)
+void thread_handoff_parameter() {}
 
-STUB_ABORT(in6_clat46_eventhdlr_callback)
+void in6_clat46_eventhdlr_callback() {}
 
-STUB_ABORT(turnstile_update_inheritor_complete)
+void turnstile_update_inheritor_complete() {}
 
-STUB_ABORT(nat464_insert_frag46)
+void nat464_insert_frag46() {}
 
-STUB_ABORT(nat464_synthesize_ipv6)
+void nat464_synthesize_ipv6() {}
 
-STUB_ABORT(turnstile_complete)
+void turnstile_complete() {}
 
-STUB_ABORT(nat464_translate_64)
+void nat464_translate_64() {}
 
-STUB_ABORT(waitq_set_should_lazy_init_link)
+void waitq_set_should_lazy_init_link() {}
 
-STUB_ABORT(workq_is_exiting)
+void workq_is_exiting() {}
 
 int sysctl_helper_waitq_set_nelem() { return 0; }
 
-STUB_ABORT(turnstile_alloc)
+void turnstile_alloc() {}
 
-STUB_ABORT(workq_kern_threadreq_update_inheritor)
+void workq_kern_threadreq_update_inheritor() {}
 
-STUB_ABORT(thread_handoff_deallocate)
+void thread_handoff_deallocate() {}
 
-STUB_ABORT(workq_kern_threadreq_unlock)
+void workq_kern_threadreq_unlock() {}
 
-STUB_ABORT(telemetry_pmi_setup)
+void telemetry_pmi_setup() {}
 
-STUB_ABORT(nat464_translate_46)
+void nat464_translate_46() {}
 
-STUB_ABORT(waitq_set_lazy_init_link)
+void waitq_set_lazy_init_link() {}
 
-STUB_ABORT(workq_thread_set_max_qos)
+void workq_thread_set_max_qos() {}
 
-STUB_ABORT(workq_kern_threadreq_lock)
+void workq_kern_threadreq_lock() {}
 
-STUB_ABORT(nat464_cksum_fixup)
+void nat464_cksum_fixup() {}
 
-STUB_ABORT(turnstile_deallocate)
+void turnstile_deallocate() {}
 
-STUB_ABORT(in6_clat46_event_enqueue_nwk_wq_entry)
+void in6_clat46_event_enqueue_nwk_wq_entry() {}
 
-STUB_ABORT(workq_kern_threadreq_initiate)
+void workq_kern_threadreq_initiate() {}
 
-STUB_ABORT(turnstile_reference)
+void turnstile_reference() {}
 
-STUB_ABORT(_pthread_priority_combine)
+void _pthread_priority_combine() {}
 
 void cchmac_final() {}
 
-STUB_ABORT(thread_update_kevent_override)
+void thread_update_kevent_override() {}
 
-STUB_ABORT(thread_add_kevent_override)
+void thread_add_kevent_override() {}
 
-STUB_ABORT(_disable_preemption)
+void _disable_preemption() {}
 
-STUB_ABORT(lck_spin_sleep_with_inheritor)
+void lck_spin_sleep_with_inheritor() {}
 
-STUB_ABORT(ccsha256_di)
+void ccsha256_di() {}
 
-STUB_ABORT(copysize_limit_panic)
+void copysize_limit_panic() {}
 
-STUB_ABORT(sysctl_load_devicetree_entries)
+void sysctl_load_devicetree_entries() {}
 
-STUB_ABORT(mpsc_test_pingpong)
+void mpsc_test_pingpong() {}
 
-STUB_ABORT(sysctl_task_get_no_smt)
+void sysctl_task_get_no_smt() {}
 
-STUB_ABORT(hostname_lock)
+void hostname_lock() {}
 
 void cchmac_update() {}
 
-STUB_ABORT(_os_log_internal_driverKit)
+void _os_log_internal_driverKit() {}
 
-STUB_ABORT(machine_tecs)
+void machine_tecs() {}
 
-STUB_ABORT(machine_csv)
+void machine_csv() {}
 
-STUB_ABORT(act_clear_astkevent)
+void act_clear_astkevent() {}
 
 void cchmac_init() {}
 
-STUB_ABORT(thread_drop_servicer_override)
+void thread_drop_servicer_override() {}
 
-STUB_ABORT(thread_update_servicer_override)
+void thread_update_servicer_override() {}
 
-STUB_ABORT(wakeup_one_with_inheritor)
+void wakeup_one_with_inheritor() {}
 
 struct sysctl_oid_stub sysctl__machdep_children[1] = {};
 
-STUB_ABORT(thread_unfreeze_base_pri)
+void thread_unfreeze_base_pri() {}
 
-STUB_ABORT(turnstile_deallocate_safe)
+void turnstile_deallocate_safe() {}
 
-STUB_ABORT(task_exc_guard_default)
+void task_exc_guard_default() {}
 
-STUB_ABORT(sysctl_task_set_no_smt)
+void sysctl_task_set_no_smt() {}
 
-STUB_ABORT(current_uthread)
+void current_uthread() {}
 
-STUB_ABORT(filt_wldetach_sync_ipc)
+void filt_wldetach_sync_ipc() {}
 
-STUB_ABORT(_enable_preemption)
+void _enable_preemption() {}
 
-STUB_ABORT(restricted_port_bitmap)
+void restricted_port_bitmap() {}
 
 int cfil_crypto_sign_data() { return 0; }
 
-STUB_ABORT(thread_set_no_smt)
+void thread_set_no_smt() {}
 
-STUB_ABORT(net_mpklog_enabled)
+void net_mpklog_enabled() {}
 
 int cfil_crypto_init_client() { return 0; }
 
-STUB_ABORT(task_info)
+void task_info() {}
 
-STUB_ABORT(thread_get_no_smt)
+void thread_get_no_smt() {}
 
-STUB_ABORT(task_get_coalition)
+void task_get_coalition() {}
 
-STUB_ABORT(atm_get_diagnostic_config)
+void atm_get_diagnostic_config() {}
 
 void cfil_crypto_cleanup_state() {}
 
-STUB_ABORT(copyin_atomic64)
+void copyin_atomic64() {}
 
-STUB_ABORT(thread_drop_kevent_override)
+void thread_drop_kevent_override() {}
 
-STUB_ABORT(filt_wlattach_sync_ipc)
+void filt_wlattach_sync_ipc() {}
 
-STUB_ABORT(thread_deallocate_safe)
+void thread_deallocate_safe() {}
 
 STUB_ABORT(vm_kernel_addrhash)
 
 STUB_ABORT(_vm_kernel_addrhash_XNU_INTERNAL)
 
-STUB_ABORT(thread_add_servicer_override)
+void thread_add_servicer_override() {}
 
-STUB_ABORT(net_mpklog_type)
+void net_mpklog_type() {}
 
-STUB_ABORT(mach_bridge_remote_time)
+void mach_bridge_remote_time() {}
 
-STUB_ABORT(vn_getpath_ext)
+void vn_getpath_ext() {}
 
-STUB_ABORT(wakeup_all_with_inheritor)
+void wakeup_all_with_inheritor() {}
 
-STUB_ABORT(registerSleepWakeInterest)
+void registerSleepWakeInterest() {}
 
-STUB_ABORT(absolutetime_to_microtime)
+void absolutetime_to_microtime() {}
 
-STUB_ABORT(thread_abort)
+void thread_abort() {}
 const char *strnstr(const char *s, const char *find, size_t slen) {
   size_t flen = strlen(find);
   if (flen == 0) return s;

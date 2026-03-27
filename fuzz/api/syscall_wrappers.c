@@ -426,4 +426,19 @@ __attribute__((visibility("default"))) int kqueue_wrapper(int* retval) {
   return kqueue(kernproc, &uap, retval);
 }
 
+__attribute__((visibility("default"))) int kevent_wrapper(
+    int kq, void* changelist, int nchanges,
+    void* eventlist, int nevents, int* retval) {
+  struct kevent64_args uap = {
+      .fd = kq,
+      .changelist = (user_addr_t)changelist,
+      .nchanges = nchanges,
+      .eventlist = (user_addr_t)eventlist,
+      .nevents = nevents,
+      .flags = 0,
+      .timeout = 0,
+  };
+  return kevent64(kernproc, &uap, retval);
+}
+
 #pragma clang diagnostic pop

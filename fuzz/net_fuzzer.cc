@@ -557,6 +557,9 @@ extern const unsigned long diocaddrule_val;
 extern const unsigned long diocchangerule_val;
 extern const unsigned long diockillstates_val;
 
+extern int kevent_wrapper(int kq, void* changelist, int nchanges,
+                          void* eventlist, int nevents, int* retval);
+
 // Enable this when copyout should work.
 extern bool real_copyout;
 
@@ -1699,6 +1702,41 @@ DEFINE_BINARY_PROTO_FUZZER(const Session &session) {
           connect_wrapper(command.flow_divert_connect().fd(),
                           (caddr_t)addr_s.data(), addr_s.size(), nullptr);
         }
+        break;
+      }
+      case Command::kKeventCmd: {
+        const Kevent &kev = command.kevent_cmd();
+        // Build changelist from proto
+        int nchanges = std::min((int)kev.changes_size(), 8);
+        struct {
+          uint64_t ident;
+          int16_t filter;
+          uint16_t flags;
+          uint32_t fflags;
+          int64_t data;
+          uint64_t udata;
+          uint64_t ext[2];
+        } changelist[8] = {};
+        for (int i = 0; i < nchanges; i++) {
+          changelist[i].ident = kev.changes(i).ident();
+          changelist[i].filter = (int16_t)kev.changes(i).filter();
+          int flags = 0;
+          for (int f : kev.changes(i).flags()) flags |= f;
+          changelist[i].flags = (uint16_t)flags;
+        }
+        // Allocate event buffer
+        int nevents = kev.nevents() % 8;
+        struct {
+          uint64_t ident;
+          int16_t filter;
+          uint16_t flags;
+          uint32_t fflags;
+          int64_t data;
+          uint64_t udata;
+          uint64_t ext[2];
+        } eventlist[8] = {};
+        kevent_wrapper(kev.kq(), changelist, nchanges,
+                       eventlist, nevents, &retval);
         break;
       }
       case Command::COMMAND_NOT_SET:
