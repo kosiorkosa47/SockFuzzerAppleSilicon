@@ -1614,19 +1614,31 @@ DEFINE_BINARY_PROTO_FUZZER(const Session &session) {
           }
         }
         // Apply optional socket option in this state.
+        // Build a synthetic Command wrapping the extra_sockopt for HandleSetSockOpt.
         if (command.tcp_session().has_extra_sockopt()) {
           const SetSocketOpt &sopt = command.tcp_session().extra_sockopt();
-          int level = sopt.level();
-          int name = sopt.name();
+          int level = 0, name = 0;
           std::string val_data;
-          if (sopt.has_val() && sopt.val().has_raw()) {
-            val_data = sopt.val().raw();
-          } else if (sopt.has_val() && sopt.val().has_int_val()) {
-            int32_t v = sopt.val().int_val().value();
-            val_data = std::string((char *)&v, (char *)&v + sizeof(v));
+          if (sopt.has_legacy()) {
+            level = sopt.legacy().level();
+            name = sopt.legacy().name();
+            if (sopt.legacy().has_val())
+              val_data = BuildSockOptVal(sopt.legacy().val());
+          } else if (sopt.has_sol_socket()) {
+            level = 0xffff;
+            name = sopt.sol_socket().name();
+            if (sopt.sol_socket().has_val())
+              val_data = BuildSockOptVal(sopt.sol_socket().val());
+          } else if (sopt.has_tcp()) {
+            level = 6;
+            name = sopt.tcp().name();
+            if (sopt.tcp().has_val())
+              val_data = BuildSockOptVal(sopt.tcp().val());
           }
-          setsockopt_wrapper(fd, level, name, (caddr_t)val_data.data(),
-                             val_data.size(), nullptr);
+          if (level || name) {
+            setsockopt_wrapper(fd, level, name, (caddr_t)val_data.data(),
+                               val_data.size(), nullptr);
+          }
         }
         break;
       }
