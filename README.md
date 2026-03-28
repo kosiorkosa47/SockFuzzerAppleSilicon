@@ -48,6 +48,20 @@ graph TD
     style K fill:#66bb6a,color:#fff
 ```
 
+## In Action
+
+**Build (macOS Apple Silicon):**
+
+![Build](docs/screenshots/build.png)
+
+**Fuzzer startup — loading corpus and discovering new coverage:**
+
+![Fuzzer Startup](docs/screenshots/fuzzer_startup.png)
+
+**24/7 campaign — 8.5M+ executions, corpus optimization:**
+
+![Fuzzer Campaign](docs/screenshots/fuzzer_campaign.png)
+
 ## What's different in this fork
 
 | Area | Original (pre-v3) | This fork |
@@ -248,13 +262,9 @@ Update `CMakeLists.txt` if source paths changed.
 
 ## Bugs Found
 
-This fuzzer is actively used for XNU kernel security research. Findings
-will be listed here after responsible disclosure periods expire.
-
-| Date | Component | Type | Status |
-|---|---|---|---|
-| 2026-03 | kern_event (kqueue) | NULL deref in knote_fdfind | Under analysis |
-| — | — | — | Active campaign in progress |
+This fuzzer is actively used for XNU kernel security research. Any findings
+will be reported to Apple through their [Security Bounty](https://security.apple.com/bounty/)
+program and listed here after responsible disclosure periods expire.
 
 ## License
 
