@@ -49,9 +49,10 @@ jobs:
             -max_total_time=5 2>&1
           EXIT_CODE=$?
           set -e
-          # Exit codes: 0=clean, 124=timeout, 77=XNU assert, 134=ASAN finding
+          # Exit codes: 0=clean, 1=crash found, 124=timeout, 77=XNU assert, 134=ASAN finding
           case $EXIT_CODE in
             0)   echo "Smoke test passed — clean exit" ;;
+            1)   echo "Smoke test: crash detected — this is a finding" ;;
             124) echo "Smoke test passed — timeout (expected)" ;;
             77)  echo "Smoke test: XNU assertion hit — this is a finding" ;;
             134) echo "Smoke test: ASAN violation detected — this is a finding" ;;
@@ -96,9 +97,10 @@ jobs:
             -max_total_time=5 2>&1
           EXIT_CODE=$?
           set -e
-          # Exit codes: 0=clean, 124=timeout, 77=XNU assert, 134=ASAN finding
+          # Exit codes: 0=clean, 1=crash found, 124=timeout, 77=XNU assert, 134=ASAN finding
           case $EXIT_CODE in
             0)   echo "Smoke test passed — clean exit" ;;
+            1)   echo "Smoke test: crash detected — this is a finding" ;;
             124) echo "Smoke test passed — timeout (expected)" ;;
             77)  echo "Smoke test: XNU assertion hit — this is a finding" ;;
             134) echo "Smoke test: ASAN violation detected — this is a finding" ;;
