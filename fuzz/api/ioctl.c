@@ -31,6 +31,7 @@
 #include "bsd/net/pfvar.h"
 #include "bsd/netinet6/in6_var.h"
 #include "bsd/netinet6/nd6.h"
+#include "bsd/sys/fcntl.h"
 #include "bsd/sys/sockio.h"
 
 #define SIOCGIFORDER _IOWR('i', 179, struct if_order)
@@ -353,3 +354,134 @@ __attribute__((visibility("default"))) const unsigned long diocchangerule_val =
     DIOCCHANGERULE;
 __attribute__((visibility("default"))) const unsigned long diockillstates_val =
     DIOCKILLSTATES;
+
+// --- Item 10: PF ioctl bridge ---
+//
+// PF is normally reached through ioctls on /dev/pf. This harness has no
+// device layer and no /dev, so PF ioctls sent through an ordinary socket fd
+// were handed to soioctl, rejected, and never reached PF at all. That is why
+// the rule fields in the grammar had no effect and a sentinel pointer was
+// good enough. These entry points call pfioctl directly, which is exactly
+// what the character device switch would do. A device ioctl is handed a
+// pointer the syscall layer has already copied into the kernel, so the
+// structures are built here, in the one translation unit that can see
+// pfvar.h, and passed through as they are.
+
+extern struct proc* kernproc;
+int pfioctl(dev_t dev, u_long cmd, caddr_t addr, int flags, struct proc* p);
+
+// Flat description of a PF rule, so that net_fuzzer.cc can express one
+// without including pfvar.h. Keep in sync with fuzz/api/pf_bridge_types.h
+// users, that is, only backend.h declares these.
+struct fuzz_pf_rule_spec {
+  char ifname[16];
+  uint32_t ioc_action;  /* pfioc_rule.action, the PF_CHANGE_* selector */
+  uint32_t ticket;
+  uint32_t pool_ticket;
+  uint32_t nr;
+  uint32_t rule_action; /* pf_rule.action, PF_PASS / PF_DROP / ... */
+  uint32_t direction;
+  uint32_t af;
+  uint32_t proto;
+  uint32_t rule_flag;
+  uint8_t src_addr[16];
+  uint8_t dst_addr[16];
+  uint16_t src_port;
+  uint16_t dst_port;
+  uint8_t keep_state;
+  uint8_t quick;
+};
+
+struct fuzz_pf_kill_spec {
+  char ifname[16];
+  uint32_t af;
+  uint32_t proto;
+  uint8_t src_addr[16];
+  uint8_t dst_addr[16];
+  uint16_t src_port;
+  uint16_t dst_port;
+};
+
+static void fuzz_pf_fill_addr(struct pf_addr_wrap* wrap,
+                              union pf_rule_xport* xport,
+                              const uint8_t addr[16], uint16_t port) {
+  wrap->type = PF_ADDR_ADDRMASK;
+  memcpy(&wrap->v.a.addr, addr, sizeof(wrap->v.a.addr));
+  memset(&wrap->v.a.mask, 0xff, sizeof(wrap->v.a.mask));
+  if (port != 0) {
+    xport->range.port[0] = htons(port);
+    xport->range.port[1] = htons(port);
+    xport->range.op = PF_OP_EQ;
+  }
+}
+
+__attribute__((visibility("default"))) int pf_ioctl_rule(
+    unsigned long cmd, const struct fuzz_pf_rule_spec* spec) {
+  struct pfioc_rule pr;
+
+  memset(&pr, 0, sizeof(pr));
+  pr.action = spec->ioc_action;
+  pr.ticket = spec->ticket;
+  pr.pool_ticket = spec->pool_ticket;
+  pr.nr = spec->nr;
+  /* Empty anchor means the main ruleset. */
+
+  pr.rule.action = (u_int8_t)spec->rule_action;
+  pr.rule.direction = (u_int8_t)spec->direction;
+  pr.rule.af = (sa_family_t)spec->af;
+  pr.rule.proto = (u_int8_t)spec->proto;
+  pr.rule.rule_flag = spec->rule_flag;
+  pr.rule.keep_state = spec->keep_state;
+  pr.rule.quick = spec->quick;
+  strlcpy(pr.rule.ifname, spec->ifname, sizeof(pr.rule.ifname));
+  fuzz_pf_fill_addr(&pr.rule.src.addr, &pr.rule.src.xport, spec->src_addr,
+                    spec->src_port);
+  fuzz_pf_fill_addr(&pr.rule.dst.addr, &pr.rule.dst.xport, spec->dst_addr,
+                    spec->dst_port);
+
+  return pfioctl(0, cmd, (caddr_t)&pr, FREAD | FWRITE, kernproc);
+}
+
+__attribute__((visibility("default"))) int pf_ioctl_kill_states(
+    unsigned long cmd, const struct fuzz_pf_kill_spec* spec) {
+  struct pfioc_state_kill psk;
+
+  memset(&psk, 0, sizeof(psk));
+  psk.psk_af = (sa_family_t)spec->af;
+  psk.psk_proto = (u_int8_t)spec->proto;
+  strlcpy(psk.psk_ifname, spec->ifname, sizeof(psk.psk_ifname));
+  fuzz_pf_fill_addr(&psk.psk_src.addr, &psk.psk_src.xport, spec->src_addr,
+                    spec->src_port);
+  fuzz_pf_fill_addr(&psk.psk_dst.addr, &psk.psk_dst.xport, spec->dst_addr,
+                    spec->dst_port);
+
+  return pfioctl(0, cmd, (caddr_t)&psk, FREAD | FWRITE, kernproc);
+}
+
+// PF refuses to start unless its purge thread exists, and this harness starts
+// no kernel threads at all (kernel_thread_start is a stub), so DIOCSTART could
+// only ever return ENOMEM and the whole PF data path stayed unreachable. The
+// pointer is compared against NULL in three places and never dereferenced, so
+// a sentinel is enough. States still get cleared explicitly in pf_flush_all,
+// which is what the purge thread would otherwise do over time.
+__attribute__((visibility("default"))) void pf_enable_purge_thread(void) {
+  if (pf_purge_thread == NULL) {
+    pf_purge_thread = (struct thread*)(void*)&pf_purge_thread;
+  }
+}
+
+// DIOCSTART and DIOCSTOP take no payload.
+__attribute__((visibility("default"))) int pf_ioctl_no_payload(
+    unsigned long cmd) {
+  return pfioctl(0, cmd, NULL, FREAD | FWRITE, kernproc);
+}
+
+// Drop every PF state and turn PF off again. Called during teardown so that
+// one iteration cannot leave rules or states behind for the next one.
+__attribute__((visibility("default"))) void pf_flush_all(void) {
+  struct fuzz_pf_kill_spec clear;
+
+  memset(&clear, 0, sizeof(clear));
+  pf_ioctl_kill_states(DIOCCLRSTATES, &clear);
+  pf_ioctl_no_payload(DIOCSTOP);
+}

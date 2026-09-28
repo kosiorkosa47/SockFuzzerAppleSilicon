@@ -153,8 +153,9 @@ enum In6Addr {
   MAYBE_LOCALHOST = 16777216;
 }
 
-// These can be used as-is for 32-bit ints.
-enum InAddr {
+// Curated IPv4 addresses, written in host byte order (dotted quad read
+// left to right). The harness converts them to network byte order.
+enum CuratedInAddr {
   IN4_ADDR_0 = 0;
   IN4_ADDR_1 = 1;
   IN4_ADDR_2 = 2;
@@ -165,6 +166,16 @@ enum InAddr {
   // 192.168.86.88
   IN4_ADDR_6 = -1062709672;
   IN4_ADDR_BROADCAST = -1;
+}
+
+// An IPv4 address: either one of the curated constants above, or an
+// arbitrary 32-bit value so the mutator can reach any address at all.
+// Both are given in host byte order; the harness applies htonl.
+message InAddr {
+  oneof value {
+    CuratedInAddr curated = 1;
+    uint32 raw = 2;
+  }
 }
 
 enum FlowInfo {
@@ -182,7 +193,8 @@ enum ScopeId {
   SCOPE_ID_50 = 50;
 }
 
-enum Port {
+// Curated port numbers in host byte order. The harness applies htons.
+enum CuratedPort {
   PORT_0 = 0;
   PORT_1 = 1;
   PORT_2 = 2;
@@ -197,6 +209,15 @@ enum Port {
   PORT_65000 = 65000;
   PORT_65534 = 65534;
   PORT_65535 = 65535;
+}
+
+// A port number: either one of the curated constants above, or an
+// arbitrary 16-bit value (only the low 16 bits of raw are used).
+message Port {
+  oneof value {
+    CuratedPort curated = 1;
+    uint32 raw = 2;
+  }
 }
 
 // Interface index obtained from if_nametoindex
@@ -265,7 +286,7 @@ message Command {
     Kqueue kqueue = 45;
     TcpSession tcp_session = 46;
     // Novel subsystems beyond P0 scope (#89)
-    ContentFilterAttach cfil_attach = 47;
+    ContentFilterQuery cfil_query = 47;
     FlowDivertConnect flow_divert_connect = 48;
     Kevent kevent_cmd = 49;
   }
@@ -273,9 +294,14 @@ message Command {
 
 // --- Content Filter (#89) ---
 // Kernel content inspection framework (Screen Time, MDM, parental controls)
-message ContentFilterAttach {
+// SO_CFIL_SOCK_ID is a get-only option, and there is no socket option that
+// attaches a content filter: attaching happens inside the kernel once a
+// filter registers through a kernel control socket, which this harness cannot
+// create (see the cfil_active_count note in fuzz/api/backend.c). So this
+// command reads the filter socket id back instead, which is the only cfil
+// operation reachable from a socket here.
+message ContentFilterQuery {
   required FileDescriptor fd = 1;
-  optional uint32 filter_id = 2;
 }
 
 // --- Flow Divert (#89) ---
@@ -283,7 +309,10 @@ message ContentFilterAttach {
 message FlowDivertConnect {
   required FileDescriptor fd = 1;
   optional SockAddr target = 2;
-  optional uint32 flow_id = 3;
+  // Kernel control unit. The harness folds it into 1..30, because XNU only
+  // continues past the token parser for units below GROUP_COUNT_MAX.
+  optional uint32 ctl_unit = 3;
+  optional uint32 aggregate_unit = 4;
 }
 
 // --- kqueue (B4) ---
@@ -415,7 +444,9 @@ enum ShutdownHow {
 
 message PfControl {
   required PfAction action = 1;
-  optional FileDescriptor fd = 2;
+  // Field 2 used to be a descriptor. PF is reached through pfioctl directly,
+  // so there is nothing to address by descriptor here.
+  reserved 2;
 }
 
 enum PfAction {
@@ -706,6 +737,10 @@ message PfAddr {
   optional uint32 port = 2;
 }
 
+// A real PF rule, serialized into struct pfioc_rule by the bridge in
+// fuzz/api/ioctl.c. The IoctlReal.fd field is ignored for the PF commands:
+// PF is a device ioctl, not a socket one, so the bridge calls pfioctl
+// directly instead of going through a descriptor.
 message PfIoctlRule {
   optional IfrName ifname = 1;
   optional uint32 action = 2;    // PF_PASS=0, PF_DROP=1, PF_SCRUB=2
@@ -714,12 +749,24 @@ message PfIoctlRule {
   optional Protocol proto = 5;
   optional PfAddr src = 6;
   optional PfAddr dst = 7;
+  // Ticket handshake. A freshly initialized main ruleset carries ticket 0,
+  // so leaving this unset is what gets past the ticket check without a
+  // DIOCXBEGIN transaction first.
+  optional uint32 ticket = 8;
+  optional uint32 pool_ticket = 9;
+  optional uint32 nr = 10;
+  optional uint32 ioc_action = 11;  // pfioc_rule.action, PF_CHANGE_*
+  optional uint32 rule_flag = 12;
+  optional uint32 keep_state = 13;
+  optional bool quick = 14;
 }
 
 message PfIoctlKillStates {
   optional PfAddr src = 1;
   optional PfAddr dst = 2;
   optional IfrName ifname = 3;
+  optional uint32 af = 4;
+  optional Protocol proto = 5;
 }
 
 message IoctlReal {
@@ -893,10 +940,13 @@ message Packet {
     bytes raw_ip4 = 1000;
     bytes raw_ip6 = 1001;
   }
-  // Optional: split packet across mbuf chain for boundary bug detection
+  // Optional: split packet across an mbuf chain for boundary bug detection.
+  // Honored for every arm of the oneof above, not just the raw ones.
   optional MbufLayout mbuf_layout = 1002;
-  // Select receive interface: true = fake ethernet, false/unset = loopback
-  optional bool use_ethernet_if = 1003;
+  // Field 1003 used to be use_ethernet_if. It was never read, and it cannot
+  // be: the harness attaches only lo0, so there is no ethernet interface to
+  // point a received packet at. Removed rather than left as a no-op.
+  reserved 1003;
 }
 
 message TcpPacket {

@@ -44,6 +44,9 @@ typedef struct {
 mcache_t* mcache_create(const char* name, size_t bufsize, size_t align,
                         u_int32_t flags, int wait) {
   mcache_t* cache = (mcache_t*)malloc(sizeof(mcache_t));
+  if (cache == NULL) {
+    return NULL;
+  }
   cache->bufsize = bufsize;
   cache->cluster_cache = false;
   return cache;
@@ -57,6 +60,9 @@ mcache_t* mcache_create_ext(const char* name, size_t bufsize, void* allocfn,
                             void* notifyfn, void* arg, u_int32_t flags,
                             int wait) {
   mcache_t* cache = (mcache_t*)malloc(sizeof(mcache_t));
+  if (cache == NULL) {
+    return NULL;
+  }
   cache->bufsize = bufsize;
   cache->cluster_cache = allocfn == mbuf_cslab_alloc;
   return cache;
@@ -79,15 +85,32 @@ struct mbuf* mbuf_create(const uint8_t* data, size_t size, bool is_header,
     max_size = njclbytes;
   }
   if (size >= max_size) {
-    size = max_size - 1;
+    // Refuse instead of quietly shortening the packet. Truncating here made
+    // the mbuf disagree with the length the caller believed it had asked for,
+    // and in a chain that mismatch is invisible until something reads past
+    // the end.
+    free(m);
+    return NULL;
   }
 
   if (force_ext || size > sizeof(m->M_dat.MH.MH_dat.MH_databuf)) {
+    // calloc(0) may legitimately return NULL, so keep one byte as the floor.
+    size_t ext_size = size > 0 ? size : 1;
+    caddr_t buf = (caddr_t)calloc(1, ext_size);
+    if (buf == NULL) {
+      free(m);
+      return NULL;
+    }
+    struct ext_ref* rfa = (struct ext_ref*)calloc(1, sizeof(struct ext_ref));
+    if (rfa == NULL) {
+      free(buf);
+      free(m);
+      return NULL;
+    }
     m->m_flags = M_EXT;
-    m->m_data = m->m_ext.ext_buf = (caddr_t)calloc(1, size);
+    m->m_data = m->m_ext.ext_buf = buf;
     m->m_ext.ext_size = size;
 
-    struct ext_ref* rfa = (struct ext_ref*)calloc(1, sizeof(struct ext_ref));
     rfa->refcnt = 1;
     rfa->minref = 1;
     int EXTF_COMPOSITE = 0x1;
@@ -183,6 +206,11 @@ int mcache_alloc_ext(mcache_t* cp, void** list, unsigned int num, int wait) {
     m->m_hdr.mh_data = m->m_ext.ext_buf;
     m->m_hdr.mh_len = cp->bufsize;
     struct ext_ref* rfa = (struct ext_ref*)calloc(1, sizeof(struct ext_ref));
+    if (rfa == NULL) {
+      free(aligned_buf);
+      free(m);
+      break;
+    }
     rfa->refcnt = 1;
     rfa->minref = 1;
     m->m_ext.ext_refflags = rfa;

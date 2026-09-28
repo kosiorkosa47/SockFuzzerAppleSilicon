@@ -30,11 +30,52 @@
 #define FUZZ_BACKEND_H_
 
 bool init_proc(void);
+bool configure_loopback_address(void);
+void drain_loopback_input(void);
+size_t necp_aggregate_result_size(void);
 void clear_all();
 void* get_mbuf_data(const char* data, size_t size, int pktflags);
 void* get_mbuf_data_chained(const char* data, size_t size, int pktflags,
                              const uint32_t* split_points, int num_splits);
 void ip_input_wrapper(void* m);
+
+// Item 10: PF ioctl bridge, implemented in fuzz/api/ioctl.c. Keep these
+// structure definitions identical to the ones there.
+struct fuzz_pf_rule_spec {
+  char ifname[16];
+  uint32_t ioc_action;
+  uint32_t ticket;
+  uint32_t pool_ticket;
+  uint32_t nr;
+  uint32_t rule_action;
+  uint32_t direction;
+  uint32_t af;
+  uint32_t proto;
+  uint32_t rule_flag;
+  uint8_t src_addr[16];
+  uint8_t dst_addr[16];
+  uint16_t src_port;
+  uint16_t dst_port;
+  uint8_t keep_state;
+  uint8_t quick;
+};
+
+struct fuzz_pf_kill_spec {
+  char ifname[16];
+  uint32_t af;
+  uint32_t proto;
+  uint8_t src_addr[16];
+  uint8_t dst_addr[16];
+  uint16_t src_port;
+  uint16_t dst_port;
+};
+
+int pf_ioctl_rule(unsigned long cmd, const struct fuzz_pf_rule_spec* spec);
+int pf_ioctl_kill_states(unsigned long cmd,
+                         const struct fuzz_pf_kill_spec* spec);
+int pf_ioctl_no_payload(unsigned long cmd);
+void pf_flush_all(void);
+void pf_enable_purge_thread(void);
 void ip6_input_wrapper(void* m);
 
 #endif  // FUZZ_BACKEND_H_

@@ -29,6 +29,8 @@
 #include <fuzzer/FuzzedDataProvider.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include <memory>
@@ -65,6 +67,74 @@ int combine_flags(const T &flags) {
   int result = 0;
   for (int f : flags) result |= f;
   return result;
+}
+
+// Host to network byte order conversions, written with compiler builtins so
+// that no extra system headers have to be pulled into this translation unit
+// (the XNU headers below already own most of the usual names).
+#if defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+#define FUZZ_HTONS(x) ((uint16_t)(x))
+#define FUZZ_HTONL(x) ((uint32_t)(x))
+#else
+#define FUZZ_HTONS(x) __builtin_bswap16((uint16_t)(x))
+#define FUZZ_HTONL(x) __builtin_bswap32((uint32_t)(x))
+#endif
+
+// Socket options and flow divert wire constants that the harness does not
+// get from XNU headers. See bsd/sys/socket.h and
+// bsd/netinet/flow_divert_proto.h.
+#define XNU_SO_CFIL_SOCK_ID 0x1110
+#define XNU_SO_FLOW_DIVERT_TOKEN 0x1106
+#define XNU_FLOW_DIVERT_TLV_CTL_UNIT 10
+#define XNU_FLOW_DIVERT_TLV_AGGREGATE_UNIT 26
+#define XNU_FLOW_DIVERT_GROUP_COUNT_MAX 31
+
+// InAddr and Port are curated-or-raw oneofs in the grammar. Every conversion
+// into an on-the-wire structure goes through these helpers so that the byte
+// swap is applied exactly once, and in the same way, at every use site.
+static uint32_t in_addr_host(const InAddr &addr) {
+  switch (addr.value_case()) {
+    case InAddr::kRaw:
+      return addr.raw();
+    case InAddr::kCurated:
+      return (uint32_t)addr.curated();
+    default:
+      return 0;
+  }
+}
+
+// Returns an in_addr whose s_addr is already in network byte order.
+static struct in_addr get_in_addr(const InAddr &addr) {
+  struct in_addr out;
+  out.s_addr = FUZZ_HTONL(in_addr_host(addr));
+  return out;
+}
+
+// One flow divert TLV: a one byte type, a four byte big-endian length, then
+// the value. Only 32-bit values are needed here.
+static std::string FlowDivertTlv(uint8_t type, uint32_t value) {
+  std::string tlv(1, (char)type);
+  uint32_t len = FUZZ_HTONL(sizeof(value));
+  tlv.append((const char *)&len, sizeof(len));
+  uint32_t be_value = FUZZ_HTONL(value);
+  tlv.append((const char *)&be_value, sizeof(be_value));
+  return tlv;
+}
+
+static uint16_t port_host(const Port &port) {
+  switch (port.value_case()) {
+    case Port::kRaw:
+      return (uint16_t)port.raw();
+    case Port::kCurated:
+      return (uint16_t)port.curated();
+    default:
+      return 0;
+  }
+}
+
+// Returns a port already in network byte order.
+static uint16_t get_port(const Port &port) {
+  return FUZZ_HTONS(port_host(port));
 }
 
 // TODO(upstream): support multiple addresses of each type below,
@@ -202,7 +272,7 @@ void get_in6_addr(struct in6_addr *sai, enum In6Addr addr) {
 void get_sockaddr6(struct sockaddr_in6 *sai, const SockAddr6 &sa6) {
   sai->sin6_len = sizeof(struct sockaddr_in6);
   sai->sin6_family = (sa_family_t)AF_INET6;  // sa6.family();
-  sai->sin6_port = __builtin_bswap16((in_port_t)sa6.port());
+  sai->sin6_port = (in_port_t)get_port(sa6.port());
   sai->sin6_flowinfo = sa6.flow_info();
   get_in6_addr(&sai->sin6_addr, sa6.sin6_addr());
   sai->sin6_scope_id = sa6.sin6_scope_id();
@@ -228,8 +298,8 @@ std::string get_sockaddr(const SockAddr &sockaddr) {
           .sin_len = sizeof(struct sockaddr_in),
           .sin_family =
               AF_INET,  // (unsigned char)sockaddr.sockaddr4().sin_family(),
-          .sin_port = __builtin_bswap16((unsigned short)sockaddr.sockaddr4().sin_port()),
-          .sin_addr = {(unsigned int)sockaddr.sockaddr4().sin_addr()},
+          .sin_port = get_port(sockaddr.sockaddr4().sin_port()),
+          .sin_addr = get_in_addr(sockaddr.sockaddr4().sin_addr()),
           .sin_zero = {},
       };
       dat = std::string((char *)&sai, (char *)&sai + sizeof(sai));
@@ -321,8 +391,8 @@ std::string get_ip_hdr(const IpHdr &hdr, size_t expected_size) {
     while (options.size() % 4 != 0) options.push_back('\0');  // pad
   }
 
-  struct in_addr ip_src = {.s_addr = (unsigned int)hdr.ip_src()};
-  struct in_addr ip_dst = {.s_addr = (unsigned int)hdr.ip_dst()};
+  struct in_addr ip_src = get_in_addr(hdr.ip_src());
+  struct in_addr ip_dst = get_in_addr(hdr.ip_dst());
   bool malform = hdr.has_malform_header() && hdr.malform_header();
   uint8_t ihl = malform ? (uint8_t)hdr.ip_hl() : (uint8_t)(5 + (options.size() / 4));
   struct ip ip_hdr = {
@@ -357,8 +427,8 @@ std::string get_ip_hdr(const IpHdr &hdr, size_t expected_size) {
 
 std::string get_tcp_hdr(const TcpHdr &hdr) {
   struct tcphdr tcphdr = {
-      .th_sport = __builtin_bswap16((unsigned short)hdr.th_sport()),
-      .th_dport = __builtin_bswap16((unsigned short)hdr.th_dport()),
+      .th_sport = get_port(hdr.th_sport()),
+      .th_dport = get_port(hdr.th_dport()),
       .th_seq = __builtin_bswap32(hdr.th_seq()),
       .th_ack = __builtin_bswap32(hdr.th_ack()),
       .th_off = hdr.th_off(),
@@ -683,18 +753,30 @@ void DoNecpClientAction(const NecpClientAction &necp_client_action) {
   }
 }
 
-void DoTcpInput(const TcpPacket &tcp_packet) {
+// Item 12: one place that turns packet bytes into an mbuf. Every packet
+// type goes through here, so MbufLayout is honored no matter which arm of the
+// Packet oneof the grammar chose, and the receive interface and packet flags
+// are decided once. Returns NULL when the chain could not be built, and the
+// callers must not inject anything in that case.
+static void *BuildPacketMbuf(const std::string &bytes, const Packet &packet) {
+  if (bytes.empty()) return nullptr;
+  if (packet.has_mbuf_layout() &&
+      packet.mbuf_layout().split_points_size() > 0) {
+    std::vector<uint32_t> splits(packet.mbuf_layout().split_points().begin(),
+                                 packet.mbuf_layout().split_points().end());
+    return get_mbuf_data_chained(bytes.data(), bytes.size(), PKTF_LOOP,
+                                 splits.data(), (int)splits.size());
+  }
+  return get_mbuf_data(bytes.data(), bytes.size(), PKTF_LOOP);
+}
+
+void DoTcpInput(const TcpPacket &tcp_packet, const Packet &packet) {
   std::string tcp_hdr_s = get_tcp_hdr(tcp_packet.tcp_hdr());
   size_t payload_size = tcp_hdr_s.size() + tcp_packet.data().size();
   std::string ip_hdr_s = get_ip_hdr(tcp_packet.ip_hdr(), payload_size);
   std::string packet_s = ip_hdr_s + tcp_hdr_s + tcp_packet.data();
 
-  if (packet_s.empty()) {
-    return;
-  }
-
-  // TODO(upstream): fuzz structure of mbuf itself
-  void *mbuf_data = get_mbuf_data(packet_s.data(), packet_s.size(), PKTF_LOOP);
+  void *mbuf_data = BuildPacketMbuf(packet_s, packet);
   if (!mbuf_data) {
     return;
   }
@@ -702,18 +784,14 @@ void DoTcpInput(const TcpPacket &tcp_packet) {
   ip_input_wrapper(mbuf_data);
 }
 
-void DoTcp6Input(const Tcp6Packet &tcp6_packet) {
+void DoTcp6Input(const Tcp6Packet &tcp6_packet, const Packet &packet) {
   std::string tcp_hdr_s = get_tcp_hdr(tcp6_packet.tcp_hdr());
   size_t expected_size = tcp_hdr_s.size() + tcp6_packet.data().size();
   std::string packet_s = get_ip6_hdr(tcp6_packet.ip6_hdr(), expected_size);
   packet_s += tcp_hdr_s;
   packet_s += tcp6_packet.data();
 
-  if (packet_s.empty()) {
-    return;
-  }
-
-  void *mbuf_data = get_mbuf_data(packet_s.data(), packet_s.size(), PKTF_LOOP);
+  void *mbuf_data = BuildPacketMbuf(packet_s, packet);
   if (!mbuf_data) {
     return;
   }
@@ -721,12 +799,12 @@ void DoTcp6Input(const Tcp6Packet &tcp6_packet) {
   ip6_input_wrapper(mbuf_data);
 }
 
-void DoIp4Packet(const Ip4Packet &packet) {
-  size_t payload_size = packet.data().size();
-  std::string packet_s = get_ip_hdr(packet.ip_hdr(), payload_size);
-  packet_s += packet.data();
+void DoIp4Packet(const Ip4Packet &ip4_packet, const Packet &packet) {
+  size_t payload_size = ip4_packet.data().size();
+  std::string packet_s = get_ip_hdr(ip4_packet.ip_hdr(), payload_size);
+  packet_s += ip4_packet.data();
 
-  void *mbuf_data = get_mbuf_data(packet_s.data(), packet_s.size(), PKTF_LOOP);
+  void *mbuf_data = BuildPacketMbuf(packet_s, packet);
   if (!mbuf_data) {
     return;
   }
@@ -734,11 +812,11 @@ void DoIp4Packet(const Ip4Packet &packet) {
   ip_input_wrapper(mbuf_data);
 }
 
-void DoIp6Packet(const Ip6Packet &packet) {
+void DoIp6Packet(const Ip6Packet &ip6_packet, const Packet &packet) {
   std::string ext_data;
 
   // Build extension header chain.
-  for (const auto &ext : packet.ext_headers()) {
+  for (const auto &ext : ip6_packet.ext_headers()) {
     switch (ext.header_case()) {
       case Ip6ExtHeader::kRouting:
         ext_data += get_ip6_route_hdr(ext.routing());
@@ -760,12 +838,12 @@ void DoIp6Packet(const Ip6Packet &packet) {
     }
   }
 
-  size_t expected_size = ext_data.size() + packet.data().size();
-  std::string packet_s = get_ip6_hdr(packet.ip6_hdr(), expected_size);
+  size_t expected_size = ext_data.size() + ip6_packet.data().size();
+  std::string packet_s = get_ip6_hdr(ip6_packet.ip6_hdr(), expected_size);
   packet_s += ext_data;
-  packet_s += packet.data();
+  packet_s += ip6_packet.data();
 
-  void *mbuf_data = get_mbuf_data(packet_s.data(), packet_s.size(), PKTF_LOOP);
+  void *mbuf_data = BuildPacketMbuf(packet_s, packet);
   if (!mbuf_data) {
     return;
   }
@@ -773,10 +851,10 @@ void DoIp6Packet(const Ip6Packet &packet) {
   ip6_input_wrapper(mbuf_data);
 }
 
-void DoUdpInput(const UdpPacket &udp_packet) {
+void DoUdpInput(const UdpPacket &udp_packet, const Packet &packet) {
   struct udphdr udphdr = {
-      .uh_sport = __builtin_bswap16((u_int16_t)udp_packet.udp_hdr().uh_sport()),
-      .uh_dport = __builtin_bswap16((u_int16_t)udp_packet.udp_hdr().uh_dport()),
+      .uh_sport = get_port(udp_packet.udp_hdr().uh_sport()),
+      .uh_dport = get_port(udp_packet.udp_hdr().uh_dport()),
       .uh_ulen = __builtin_bswap16(sizeof(struct udphdr) +
                                     udp_packet.data().size()),
       .uh_sum = 0,
@@ -786,16 +864,15 @@ void DoUdpInput(const UdpPacket &udp_packet) {
   packet_s += std::string((char *)&udphdr, (char *)&udphdr + sizeof(udphdr));
   packet_s += udp_packet.data();
 
-  if (packet_s.empty()) return;
-  void *mbuf_data = get_mbuf_data(packet_s.data(), packet_s.size(), PKTF_LOOP);
+  void *mbuf_data = BuildPacketMbuf(packet_s, packet);
   if (!mbuf_data) return;
   ip_input_wrapper(mbuf_data);
 }
 
-void DoUdp6Input(const Udp6Packet &udp6_packet) {
+void DoUdp6Input(const Udp6Packet &udp6_packet, const Packet &packet) {
   struct udphdr udphdr = {
-      .uh_sport = __builtin_bswap16((u_int16_t)udp6_packet.udp_hdr().uh_sport()),
-      .uh_dport = __builtin_bswap16((u_int16_t)udp6_packet.udp_hdr().uh_dport()),
+      .uh_sport = get_port(udp6_packet.udp_hdr().uh_sport()),
+      .uh_dport = get_port(udp6_packet.udp_hdr().uh_dport()),
       .uh_ulen = __builtin_bswap16(sizeof(struct udphdr) +
                                     udp6_packet.data().size()),
       .uh_sum = 0,
@@ -806,13 +883,12 @@ void DoUdp6Input(const Udp6Packet &udp6_packet) {
   packet_s += std::string((char *)&udphdr, (char *)&udphdr + sizeof(udphdr));
   packet_s += udp6_packet.data();
 
-  if (packet_s.empty()) return;
-  void *mbuf_data = get_mbuf_data(packet_s.data(), packet_s.size(), PKTF_LOOP);
+  void *mbuf_data = BuildPacketMbuf(packet_s, packet);
   if (!mbuf_data) return;
   ip6_input_wrapper(mbuf_data);
 }
 
-void DoIcmp4Input(const Icmp4Packet &icmp4_packet) {
+void DoIcmp4Input(const Icmp4Packet &icmp4_packet, const Packet &packet) {
   struct icmp_hdr hdr = {
       .icmp_type = (uint8_t)icmp4_packet.icmp_hdr().icmp_type(),
       .icmp_code = (uint8_t)icmp4_packet.icmp_hdr().icmp_code(),
@@ -825,100 +901,63 @@ void DoIcmp4Input(const Icmp4Packet &icmp4_packet) {
   packet_s += std::string((char *)&hdr, (char *)&hdr + sizeof(hdr));
   packet_s += icmp4_packet.data();
 
-  if (packet_s.empty()) return;
-  void *mbuf_data = get_mbuf_data(packet_s.data(), packet_s.size(), PKTF_LOOP);
+  void *mbuf_data = BuildPacketMbuf(packet_s, packet);
   if (!mbuf_data) return;
   ip_input_wrapper(mbuf_data);
 }
 
-void DoIcmp6Input(const Icmp6Packet &icmp6_packet) {
+void DoIcmp6Input(const Icmp6Packet &icmp6_packet, const Packet &packet) {
   size_t expected_size =
       sizeof(struct icmp6_hdr) + icmp6_packet.data().size();
   std::string packet_s = get_ip6_hdr(icmp6_packet.ip6_hdr(), expected_size);
   packet_s += get_icmp6_hdr(icmp6_packet.icmp6_hdr());
   packet_s += icmp6_packet.data();
 
-  if (packet_s.empty()) return;
-  void *mbuf_data = get_mbuf_data(packet_s.data(), packet_s.size(), PKTF_LOOP);
+  void *mbuf_data = BuildPacketMbuf(packet_s, packet);
   if (!mbuf_data) return;
   ip6_input_wrapper(mbuf_data);
 }
 
 void DoIpInput(const Packet &packet) {
   switch (packet.packet_case()) {
-    case Packet::kTcpPacket: {
-      DoTcpInput(packet.tcp_packet());
+    case Packet::kTcpPacket:
+      DoTcpInput(packet.tcp_packet(), packet);
       break;
-    }
-    case Packet::kTcp6Packet: {
-      DoTcp6Input(packet.tcp6_packet());
+    case Packet::kTcp6Packet:
+      DoTcp6Input(packet.tcp6_packet(), packet);
       break;
-    }
-    case Packet::kIp4Packet: {
-      DoIp4Packet(packet.ip4_packet());
+    case Packet::kIp4Packet:
+      DoIp4Packet(packet.ip4_packet(), packet);
       break;
-    }
-    case Packet::kIp6Packet: {
-      DoIp6Packet(packet.ip6_packet());
+    case Packet::kIp6Packet:
+      DoIp6Packet(packet.ip6_packet(), packet);
       break;
-    }
-    case Packet::kUdpPacket: {
-      DoUdpInput(packet.udp_packet());
+    case Packet::kUdpPacket:
+      DoUdpInput(packet.udp_packet(), packet);
       break;
-    }
-    case Packet::kUdp6Packet: {
-      DoUdp6Input(packet.udp6_packet());
+    case Packet::kUdp6Packet:
+      DoUdp6Input(packet.udp6_packet(), packet);
       break;
-    }
-    case Packet::kIcmp4Packet: {
-      DoIcmp4Input(packet.icmp4_packet());
+    case Packet::kIcmp4Packet:
+      DoIcmp4Input(packet.icmp4_packet(), packet);
       break;
-    }
-    case Packet::kIcmp6Packet: {
-      DoIcmp6Input(packet.icmp6_packet());
+    case Packet::kIcmp6Packet:
+      DoIcmp6Input(packet.icmp6_packet(), packet);
       break;
-    }
     case Packet::kRawIp4: {
-      void *mbuf_data;
-      if (packet.has_mbuf_layout() && packet.mbuf_layout().split_points_size() > 0) {
-        std::vector<uint32_t> splits(packet.mbuf_layout().split_points().begin(),
-                                      packet.mbuf_layout().split_points().end());
-        mbuf_data = get_mbuf_data_chained(packet.raw_ip4().data(),
-                                           packet.raw_ip4().size(), PKTF_LOOP,
-                                           splits.data(), splits.size());
-      } else {
-        mbuf_data = get_mbuf_data(packet.raw_ip4().data(),
-                                  packet.raw_ip4().size(), PKTF_LOOP);
-      }
-      if (!mbuf_data) {
-        return;
-      }
-
+      void *mbuf_data = BuildPacketMbuf(packet.raw_ip4(), packet);
+      if (!mbuf_data) return;
       ip_input_wrapper(mbuf_data);
       break;
     }
     case Packet::kRawIp6: {
-      void *mbuf_data;
-      if (packet.has_mbuf_layout() && packet.mbuf_layout().split_points_size() > 0) {
-        std::vector<uint32_t> splits(packet.mbuf_layout().split_points().begin(),
-                                      packet.mbuf_layout().split_points().end());
-        mbuf_data = get_mbuf_data_chained(packet.raw_ip6().data(),
-                                           packet.raw_ip6().size(), PKTF_LOOP,
-                                           splits.data(), splits.size());
-      } else {
-        mbuf_data = get_mbuf_data(packet.raw_ip6().data(),
-                                  packet.raw_ip6().size(), PKTF_LOOP);
-      }
-      if (!mbuf_data) {
-        return;
-      }
-
+      void *mbuf_data = BuildPacketMbuf(packet.raw_ip6(), packet);
+      if (!mbuf_data) return;
       ip6_input_wrapper(mbuf_data);
       break;
     }
-    case Packet::PACKET_NOT_SET: {
+    case Packet::PACKET_NOT_SET:
       break;
-    }
   }
 }
 
@@ -960,8 +999,8 @@ std::string BuildSockOptVal(const SockOptVal &sov) {
       }
       case SockOptVal::kMreq: {
         struct ip_mreq m = {};
-        m.imr_multiaddr.s_addr = (unsigned int)sov.mreq().imr_multiaddr();
-        m.imr_interface.s_addr = (unsigned int)sov.mreq().imr_interface();
+        m.imr_multiaddr = get_in_addr(sov.mreq().imr_multiaddr());
+        m.imr_interface = get_in_addr(sov.mreq().imr_interface());
         val_data = std::string((char *)&m, (char *)&m + sizeof(m));
         break;
       }
@@ -1095,6 +1134,26 @@ void HandleIoctl(const Command &command) {
   real_copyout = true;
 }
 
+// Item 10: turn a PfAddr from the grammar into the 16 byte address plus port
+// that a PF rule address holds. The port in the message wins over any port
+// carried by the sockaddr.
+static void GetPfAddr(const PfAddr &pf_addr, uint8_t out[16], uint16_t *port) {
+  memset(out, 0, 16);
+  *port = (uint16_t)pf_addr.port();
+  if (!pf_addr.has_addr()) return;
+  const SockAddr &sa = pf_addr.addr();
+  if (sa.has_sockaddr4()) {
+    struct in_addr a = get_in_addr(sa.sockaddr4().sin_addr());
+    memcpy(out, &a.s_addr, sizeof(a.s_addr));
+    if (!pf_addr.has_port()) *port = port_host(sa.sockaddr4().sin_port());
+  } else if (sa.has_sockaddr6()) {
+    struct in6_addr a6 = {};
+    get_in6_addr(&a6, sa.sockaddr6().sin6_addr());
+    memcpy(out, &a6, sizeof(a6));
+    if (!pf_addr.has_port()) *port = port_host(sa.sockaddr6().port());
+  }
+}
+
 void HandleIoctlReal(const Command &command) {
   switch (command.ioctl_real().ioctl_case()) {
     case IoctlReal::kSiocaifaddrIn664: {
@@ -1201,19 +1260,39 @@ void HandleIoctlReal(const Command &command) {
     }
     case IoctlReal::kDiocaddrule:
     case IoctlReal::kDiocchangerule: {
-      // PF rule add/change — pass fuzzed data through copyin (#93, #99).
-      real_copyout = false;
-      unsigned long cmd = (command.ioctl_real().ioctl_case() == IoctlReal::kDiocaddrule)
-                              ? diocaddrule_val
-                              : diocchangerule_val;
-      ioctl_wrapper(command.ioctl_real().fd(), cmd, (caddr_t)1, nullptr);
-      real_copyout = true;
+      // Item 10: build a real struct pfioc_rule and go straight to pfioctl.
+      // The previous code handed a sentinel pointer to a socket ioctl, which
+      // never reached PF, so none of the rule fields meant anything.
+      bool add = command.ioctl_real().ioctl_case() == IoctlReal::kDiocaddrule;
+      const PfIoctlRule &r = add ? command.ioctl_real().diocaddrule()
+                                 : command.ioctl_real().diocchangerule();
+      struct fuzz_pf_rule_spec spec = {};
+      get_ifr_name(spec.ifname, r.ifname());
+      spec.ioc_action = r.ioc_action();
+      spec.ticket = r.ticket();
+      spec.pool_ticket = r.pool_ticket();
+      spec.nr = r.nr();
+      spec.rule_action = r.action();
+      spec.direction = r.direction();
+      spec.af = r.af();
+      spec.proto = r.proto();
+      spec.rule_flag = r.rule_flag();
+      spec.keep_state = (uint8_t)r.keep_state();
+      spec.quick = r.quick() ? 1 : 0;
+      GetPfAddr(r.src(), spec.src_addr, &spec.src_port);
+      GetPfAddr(r.dst(), spec.dst_addr, &spec.dst_port);
+      pf_ioctl_rule(add ? diocaddrule_val : diocchangerule_val, &spec);
       break;
     }
     case IoctlReal::kDiockillstates: {
-      real_copyout = false;
-      ioctl_wrapper(command.ioctl_real().fd(), diockillstates_val, (caddr_t)1, nullptr);
-      real_copyout = true;
+      const PfIoctlKillStates &k = command.ioctl_real().diockillstates();
+      struct fuzz_pf_kill_spec spec = {};
+      get_ifr_name(spec.ifname, k.ifname());
+      spec.af = k.af();
+      spec.proto = k.proto();
+      GetPfAddr(k.src(), spec.src_addr, &spec.src_port);
+      GetPfAddr(k.dst(), spec.dst_addr, &spec.dst_port);
+      pf_ioctl_kill_states(diockillstates_val, &spec);
       break;
     }
     case IoctlReal::IOCTL_NOT_SET:
@@ -1347,6 +1426,388 @@ void HandleSendmsg(const Command &command, int &retval) {
 // process. This provides perfect state isolation at the cost of ~2x overhead.
 // Useful for crash reproduction and validation campaigns.
 // C1: Fork server — design doc only. Full integration deferred.
+// --- Item 9: reach the TCP states the grammar advertises ---
+//
+// The old handler only created a listening socket and injected at most one
+// packet, so nothing past LISTEN was reachable: a synthetic peer cannot
+// complete a handshake because the server side chooses an initial sequence
+// number the harness never gets to see. Here a second real socket connects
+// over the loopback interface, so the kernel performs the whole three way
+// handshake by itself. The resulting child socket then hands us the real
+// 4-tuple and the live sequence numbers through TCP_INFO, which is what
+// makes state specific injected segments possible at all.
+
+// XNU private socket option, see bsd/netinet/tcp.h.
+#define XNU_TCP_INFO 0x200
+// _IOW('f', 126, int), see bsd/sys/filio.h. The harness deliberately does
+// not include the kernel ioctl macros, so the encoded value is spelled out.
+#define XNU_FIONBIO 0x8004667eUL
+#define XNU_SHUT_WR 1
+// 127.0.0.1 in host byte order.
+#define XNU_LOOPBACK4 0x7f000001u
+// 24.130.58.208: a remote with no route in the harness, so replies sent to
+// it are dropped instead of being looped back at us.
+#define XNU_UNROUTABLE4 0x188a3ad0u
+
+// Leading fields of XNU's struct tcp_info (bsd/netinet/tcp.h), which is
+// declared under "#pragma pack(4)". Only this prefix is needed, and
+// sooptcopyout truncates to whatever buffer size the caller passes in.
+#pragma pack(4)
+struct fuzz_tcp_info_prefix {
+  uint8_t tcpi_state;
+  uint8_t tcpi_options;
+  uint8_t tcpi_snd_wscale;
+  uint8_t tcpi_rcv_wscale;
+  uint32_t tcpi_flags;
+  uint32_t tcpi_rto;
+  uint32_t tcpi_snd_mss;
+  uint32_t tcpi_rcv_mss;
+  uint32_t tcpi_rttcur;
+  uint32_t tcpi_srtt;
+  uint32_t tcpi_rttvar;
+  uint32_t tcpi_rttbest;
+  uint32_t tcpi_snd_ssthresh;
+  uint32_t tcpi_snd_cwnd;
+  uint32_t tcpi_rcv_space;
+  uint32_t tcpi_snd_wnd;
+  uint32_t tcpi_snd_nxt;
+  uint32_t tcpi_rcv_nxt;
+};
+#pragma pack()
+
+// A live connection as the kernel sees it. Addresses and ports stay in
+// network byte order so they can be copied straight into a header; the
+// sequence numbers are in host byte order.
+struct TcpConnState {
+  bool valid = false;
+  bool v6 = false;
+  uint32_t local4 = 0;
+  uint32_t remote4 = 0;
+  uint16_t local_port = 0;
+  uint16_t remote_port = 0;
+  uint32_t snd_nxt = 0;
+  uint32_t rcv_nxt = 0;
+  uint8_t state = 0;
+};
+
+static void SetNonBlocking(int fd) {
+  int on = 1;
+  ioctl_wrapper(fd, XNU_FIONBIO, (caddr_t)&on, nullptr);
+}
+
+// Reads the 4-tuple and the sequence numbers of a connected socket.
+// Returns false when the socket is not connected, in which case no injected
+// segment can be aimed at it.
+static bool ReadTcpConnState(int fd, TcpConnState *out) {
+  uint8_t local[sizeof(struct sockaddr_in6)] = {};
+  uint8_t remote[sizeof(struct sockaddr_in6)] = {};
+  socklen_t len = sizeof(local);
+  if (getsockname_wrapper(fd, (caddr_t)local, &len, nullptr)) return false;
+  len = sizeof(remote);
+  if (getpeername_wrapper(fd, (caddr_t)remote, &len, nullptr)) return false;
+
+  struct fuzz_tcp_info_prefix ti = {};
+  socklen_t ti_len = sizeof(ti);
+  if (getsockopt_wrapper(fd, XNU_IPPROTO_TCP, XNU_TCP_INFO, (caddr_t)&ti,
+                         &ti_len, nullptr))
+    return false;
+
+  const struct sockaddr *lsa = (const struct sockaddr *)local;
+  const struct sockaddr *rsa = (const struct sockaddr *)remote;
+  out->v6 = (lsa->sa_family == XNU_AF_INET6);
+  if (!out->v6) {
+    const struct sockaddr_in *l = (const struct sockaddr_in *)local;
+    const struct sockaddr_in *r = (const struct sockaddr_in *)remote;
+    out->local4 = l->sin_addr.s_addr;
+    out->remote4 = r->sin_addr.s_addr;
+    out->local_port = l->sin_port;
+    out->remote_port = r->sin_port;
+  } else {
+    const struct sockaddr_in6 *l = (const struct sockaddr_in6 *)local;
+    const struct sockaddr_in6 *r = (const struct sockaddr_in6 *)remote;
+    out->local_port = l->sin6_port;
+    out->remote_port = r->sin6_port;
+  }
+  (void)rsa;
+  out->snd_nxt = ti.tcpi_snd_nxt;
+  out->rcv_nxt = ti.tcpi_rcv_nxt;
+  out->state = ti.tcpi_state;
+  out->valid = true;
+  return true;
+}
+
+// Injects one bare IPv4 TCP segment. Checksums are left at zero because the
+// harness stubs the checksum routines out to always return 0.
+static void InjectTcp4(uint32_t src_ip_net, uint16_t src_port_net,
+                       uint32_t dst_ip_net, uint16_t dst_port_net, uint32_t seq,
+                       uint32_t ack, uint8_t flags, uint16_t win) {
+  struct tcphdr th = {};
+  th.th_sport = src_port_net;
+  th.th_dport = dst_port_net;
+  th.th_seq = FUZZ_HTONL(seq);
+  th.th_ack = FUZZ_HTONL(ack);
+  th.th_off = 5;
+  th.th_flags = flags;
+  th.th_win = FUZZ_HTONS(win);
+  th.th_sum = 0;
+  th.th_urp = 0;
+
+  struct ip ih = {};
+  ih.ip_hl = 5;
+  ih.ip_v = IPV4;
+  ih.ip_tos = 0;
+  ih.ip_len = (u_short)FUZZ_HTONS(sizeof(ih) + sizeof(th));
+  ih.ip_id = 0;
+  ih.ip_off = 0;
+  ih.ip_ttl = 64;
+  ih.ip_p = XNU_IPPROTO_TCP;
+  ih.ip_sum = 0;
+  ih.ip_src.s_addr = src_ip_net;
+  ih.ip_dst.s_addr = dst_ip_net;
+
+  std::string pkt((char *)&ih, (char *)&ih + sizeof(ih));
+  pkt.append((char *)&th, (char *)&th + sizeof(th));
+  void *m = get_mbuf_data(pkt.data(), pkt.size(), PKTF_LOOP);
+  if (m) ip_input_wrapper(m);
+}
+
+// Sends one segment that looks like it came from the peer of conn.
+static void InjectFromPeer(const TcpConnState &conn, uint8_t flags,
+                           uint32_t seq_delta, uint32_t ack_delta) {
+  if (!conn.valid || conn.v6) return;
+  InjectTcp4(conn.remote4, conn.remote_port, conn.local4, conn.local_port,
+             conn.rcv_nxt + seq_delta, conn.snd_nxt + ack_delta, flags, 8192);
+}
+
+// Builds a sockaddr for the loopback address of the requested domain.
+static std::string BuildLoopbackSockaddr(int domain, uint16_t port_net) {
+  if (domain == XNU_AF_INET6) {
+    struct sockaddr_in6 sin6 = {};
+    sin6.sin6_len = sizeof(sin6);
+    sin6.sin6_family = (sa_family_t)XNU_AF_INET6;
+    sin6.sin6_port = port_net;
+    sin6.sin6_addr.s6_addr[15] = 1;  // ::1
+    return std::string((char *)&sin6, (char *)&sin6 + sizeof(sin6));
+  }
+  struct sockaddr_in sin = {};
+  sin.sin_len = sizeof(sin);
+  sin.sin_family = (sa_family_t)XNU_AF_INET;
+  sin.sin_port = port_net;
+  sin.sin_addr.s_addr = FUZZ_HTONL(XNU_LOOPBACK4);
+  return std::string((char *)&sin, (char *)&sin + sizeof(sin));
+}
+
+// Applies TcpSession.extra_sockopt to fd. Shared with the generic
+// SetSocketOpt handler through BuildSockOptVal.
+static void ApplyExtraSockopt(const SetSocketOpt &sopt, int fd) {
+  int level = 0, name = 0;
+  std::string val_data;
+  if (sopt.has_legacy()) {
+    level = sopt.legacy().level();
+    name = sopt.legacy().name();
+    if (sopt.legacy().has_val()) val_data = BuildSockOptVal(sopt.legacy().val());
+  } else if (sopt.has_sol_socket()) {
+    level = XNU_SOL_SOCKET;
+    name = sopt.sol_socket().name();
+    if (sopt.sol_socket().has_val())
+      val_data = BuildSockOptVal(sopt.sol_socket().val());
+  } else if (sopt.has_tcp()) {
+    level = XNU_IPPROTO_TCP;
+    name = sopt.tcp().name();
+    if (sopt.tcp().has_val()) val_data = BuildSockOptVal(sopt.tcp().val());
+  }
+  if (level || name) {
+    setsockopt_wrapper(fd, level, name, (caddr_t)val_data.data(),
+                       val_data.size(), nullptr);
+  }
+}
+
+// True once lo0 owns 127.0.0.1. Set during one time initialization, while no
+// FuzzedDataProvider is installed: the privilege checks the interface ioctls
+// go through are fed by the data provider, so configuring the address from
+// inside an iteration would succeed only for some inputs.
+static bool loopback_ready = false;
+
+// Ports for the harness built handshake. They are chosen here instead of
+// being read back with getsockname, because getsockname answers through
+// copyout, which this harness deliberately fails at random. Rotating the
+// value keeps sockets left behind in TIME_WAIT from blocking later sessions.
+static uint16_t NextSessionPort() {
+  static uint16_t next = 20000;
+  if (next < 20000 || next >= 60000) next = 20000;
+  return next++;
+}
+
+static void HandleTcpSession(const TcpSession &ts, std::set<int> &open_fds) {
+  int domain = ts.has_domain() ? ts.domain() : XNU_AF_INET;
+  if (domain != XNU_AF_INET6) domain = XNU_AF_INET;
+  int st = ts.session_type();
+
+  // Setting up the connection has to be reliable, otherwise none of the
+  // states below are reachable: the fake copyin/copyout and the fake
+  // privilege checks fail at random while a data provider is installed.
+  // Detach it for the plumbing and put it back before anything that is
+  // actually meant to be fuzzed.
+  FuzzedDataProvider *saved_fdp = fdp;
+  fdp = nullptr;
+
+  int listener = -1;
+  if (socket_wrapper(domain, XNU_SOCK_STREAM, XNU_IPPROTO_TCP, &listener) ||
+      listener < 0) {
+    fdp = saved_fdp;
+    return;
+  }
+  open_fds.insert(listener);
+  // Non-blocking everywhere: a blocking accept or connect would wedge the
+  // single fake thread this harness runs on.
+  SetNonBlocking(listener);
+
+  uint16_t listen_port = port_host(ts.port());
+  if (listen_port == 0) listen_port = NextSessionPort();
+  std::string bind_addr =
+      BuildLoopbackSockaddr(domain, FUZZ_HTONS(listen_port));
+  if (bind_wrapper(listener, (caddr_t)bind_addr.data(), bind_addr.size(),
+                   nullptr)) {
+    // The requested port may be taken or privileged; take a fresh one so the
+    // rest of the sequence still runs.
+    listen_port = NextSessionPort();
+    bind_addr = BuildLoopbackSockaddr(domain, FUZZ_HTONS(listen_port));
+    bind_wrapper(listener, (caddr_t)bind_addr.data(), bind_addr.size(),
+                 nullptr);
+  }
+
+  listen_wrapper(listener, 5, nullptr);
+
+  int client = -1;
+  int child = -1;
+  TcpConnState conn;
+
+  if (st >= TCP_SYN_RCVD && loopback_ready) {
+    if (socket_wrapper(domain, XNU_SOCK_STREAM, XNU_IPPROTO_TCP, &client) == 0 &&
+        client >= 0) {
+      open_fds.insert(client);
+      SetNonBlocking(client);
+      // Bind the client too, so the whole 4-tuple is known without asking
+      // the kernel for it.
+      uint16_t client_port = NextSessionPort();
+      std::string client_addr =
+          BuildLoopbackSockaddr(domain, FUZZ_HTONS(client_port));
+      bind_wrapper(client, (caddr_t)client_addr.data(), client_addr.size(),
+                   nullptr);
+      connect_wrapper(client, (caddr_t)bind_addr.data(), bind_addr.size(),
+                      nullptr);
+      drain_loopback_input();
+      // Deliver what the stack just queued on lo0, which is what lets the
+      // three way handshake actually complete. Ask accept for no peer
+      // address: that would be one more copyout that can fail at random.
+      int accepted = -1;
+      accept_wrapper(listener, nullptr, nullptr, &accepted);
+      // TODO: measured on 2026-09-28, accept usually fails here. The SYN
+      // does reach tcp_input (tcps_rcvtotal increments) but tcps_accepts and
+      // tcps_listendrop both stay at 0, so tcp_input drops the segment
+      // somewhere between finding the pcb and calling sonewconn, even though
+      // the listener is verified to be in TCPS_LISTEN and bound to the right
+      // address and port. Until that drop is found, only the states that do
+      // not need a child socket are genuinely reached. Everything below is
+      // written to work with or without the child.
+      if (accepted >= 0) {
+        child = accepted;
+        open_fds.insert(child);
+        // Snapshot the tuple and the sequence numbers while the connection
+        // is still ESTABLISHED; the steps below may close the socket.
+        ReadTcpConnState(child, &conn);
+      }
+    }
+  }
+
+  // Everything from here on is fair game for the fuzzer again.
+  fdp = saved_fdp;
+
+  // SYN_RCVD needs a half open connection, which a cooperative peer can
+  // never produce: inject a SYN from an address with no route, so the
+  // SYN-ACK is dropped and the socket stays in SYN_RCVD.
+  if (st == TCP_SYN_RCVD && domain == XNU_AF_INET) {
+    InjectTcp4(FUZZ_HTONL(XNU_UNROUTABLE4), FUZZ_HTONS(12345),
+               FUZZ_HTONL(XNU_LOOPBACK4), FUZZ_HTONS(listen_port), 0x1000, 0,
+               TH_SYN, 8192);
+  }
+
+  // Drive the connection towards the requested state. With a real peer on
+  // the other end both sides react immediately, so the states are walked
+  // through rather than parked in, which is exactly what exercises the
+  // transitions.
+  switch (st) {
+    case TCP_CLOSE_WAIT:
+      // Peer closes its write side: the child sees a FIN and lands in
+      // CLOSE_WAIT, where it stays because the child never closes.
+      if (client >= 0) shutdown_wrapper(client, XNU_SHUT_WR, nullptr);
+      break;
+    case TCP_FIN_WAIT_1:
+    case TCP_FIN_WAIT_2:
+      // The child closes its write side first.
+      if (child >= 0) shutdown_wrapper(child, XNU_SHUT_WR, nullptr);
+      break;
+    case TCP_TIME_WAIT:
+      if (child >= 0) shutdown_wrapper(child, XNU_SHUT_WR, nullptr);
+      if (client >= 0) shutdown_wrapper(client, XNU_SHUT_WR, nullptr);
+      break;
+    case TCP_CLOSING:
+      // TODO: a real simultaneous close needs a peer that does not ACK our
+      // FIN, which cannot be expressed with a live loopback socket on the
+      // other end: the kernel ACKs for us before we regain control. The FIN
+      // injected below therefore reaches the FIN handling code but usually
+      // lands in FIN_WAIT_2 rather than CLOSING. Reaching CLOSING for real
+      // needs an output hook that swallows the peer's ACK.
+      if (child >= 0) shutdown_wrapper(child, XNU_SHUT_WR, nullptr);
+      InjectFromPeer(conn, TH_FIN | TH_ACK, 0, 0);
+      break;
+    case TCP_LAST_ACK:
+      // Peer FINs first, then the child closes: the child goes through
+      // CLOSE_WAIT into LAST_ACK.
+      if (client >= 0) shutdown_wrapper(client, XNU_SHUT_WR, nullptr);
+      if (child >= 0) shutdown_wrapper(child, XNU_SHUT_WR, nullptr);
+      break;
+    default:
+      break;
+  }
+
+  // One state specific segment from the peer, built from the real tuple.
+  switch (st) {
+    case TCP_ESTABLISHED:
+    case TCP_CLOSE_WAIT:
+    case TCP_LAST_ACK:
+      InjectFromPeer(conn, TH_ACK, 0, 0);
+      break;
+    case TCP_FIN_WAIT_1:
+    case TCP_FIN_WAIT_2:
+      InjectFromPeer(conn, TH_FIN | TH_ACK, 0, 1);
+      break;
+    case TCP_TIME_WAIT:
+      InjectFromPeer(conn, TH_RST, 0, 1);
+      break;
+    default:
+      break;
+  }
+
+  // Socket options are applied to the connected child when there is one,
+  // because that is where the interesting TCP state lives.
+  if (ts.has_extra_sockopt())
+    ApplyExtraSockopt(ts.extra_sockopt(), child >= 0 ? child : listener);
+
+  // Whatever the grammar wanted to inject on top of the state above.
+  if (ts.has_extra_packet()) DoIpInput(ts.extra_packet());
+
+  // Let the stack finish whatever exchange the steps above started.
+  drain_loopback_input();
+
+  if (st == TCP_FIN_WAIT_1 || st == TCP_LAST_ACK) {
+    if (child >= 0) {
+      close_wrapper(child, nullptr);
+      open_fds.erase(child);
+    }
+  }
+}
+
 // Set SOCKFUZZER_FORK_MODE=1 for fork-per-iteration (when linked).
 static void maybe_init_fork_server() {
   // Placeholder — fork_server.c is not yet compiled into the fuzzer.
@@ -1380,6 +1841,10 @@ DEFINE_BINARY_PROTO_FUZZER(const Session &session) {
     init_proc();
     ready = true;
     maybe_init_fork_server();
+    // lo0 has no address until we give it one, and without an address there
+    // is no route to 127.0.0.1 and no local connection can be established.
+    // Interface addresses survive clear_all(), so once per process is enough.
+    loopback_ready = configure_loopback_address();
   }
 
   FuzzedDataProvider dp((const uint8_t *)session.data_provider().data(),
@@ -1448,15 +1913,18 @@ DEFINE_BINARY_PROTO_FUZZER(const Session &session) {
         TearDownIteration(open_fds, cids, true);
         break;
       case Command::kNecpMatchPolicy: {
-        std::unique_ptr<uint8_t[]> params(
-            new uint8_t[command.necp_match_policy().parameters().size()]);
-        memcpy(params.get(),
-               command.necp_match_policy().parameters().data(),
-               command.necp_match_policy().parameters().size());
-        necp_match_policy_wrapper(
-            params.get(),
-            command.necp_match_policy().parameters().size(),
-            /*returned_result=*/nullptr, &retval);
+        // Item 11: XNU rejects this call outright when either the parameter
+        // buffer or the result buffer is empty, so both have to be real.
+        // The result buffer must be at least as large as XNU's
+        // struct necp_aggregate_result, which it copies out in full.
+        std::string params = command.necp_match_policy().parameters();
+        if (params.empty()) params.push_back('\0');
+        std::vector<uint8_t> result(necp_aggregate_result_size());
+        std::unique_ptr<uint8_t[]> params_buf(new uint8_t[params.size()]);
+        memcpy(params_buf.get(), params.data(), params.size());
+        necp_match_policy_wrapper(params_buf.get(), params.size(),
+                                  (struct necp_aggregate_result *)result.data(),
+                                  &retval);
         break;
       }
       case Command::kNecpOpen: {
@@ -1611,8 +2079,9 @@ DEFINE_BINARY_PROTO_FUZZER(const Session &session) {
         break;
       case Command::kPfControl: {
         unsigned long cmd = (command.pf_control().action() == PF_START)
-                                ? diocstart_val : diocstop_val;
-        ioctl_wrapper(command.pf_control().fd(), cmd, nullptr, nullptr);
+                                ? diocstart_val
+                                : diocstop_val;
+        pf_ioctl_no_payload(cmd);
         break;
       }
       case Command::kMptcpSocket: {
@@ -1656,106 +2125,40 @@ DEFINE_BINARY_PROTO_FUZZER(const Session &session) {
         break;
       }
       case Command::kTcpSession: {
-        // F1: TCP state machine aware sequences.
-        // Create a TCP socket, walk it to the requested state, then
-        // optionally inject a packet or set a socket option in that state.
-        int domain = command.tcp_session().has_domain()
-                         ? command.tcp_session().domain() : 2;  // AF_INET
-        int fd = 0;
-        if (socket_wrapper(domain, 1 /*SOCK_STREAM*/, 6 /*IPPROTO_TCP*/, &fd))
-          break;
-        open_fds.insert(fd);
-
-        // Bind to a port.
-        if (domain == XNU_AF_INET6) {
-          struct sockaddr_in6 sin6 = {};
-          sin6.sin6_len = sizeof(sin6);
-          sin6.sin6_family = XNU_AF_INET6;
-          sin6.sin6_port = __builtin_bswap16((unsigned short)command.tcp_session().port());
-          bind_wrapper(fd, (caddr_t)&sin6, sizeof(sin6), nullptr);
-        } else {
-          struct sockaddr_in sin = {};
-          sin.sin_len = sizeof(sin);
-          sin.sin_family = XNU_AF_INET;
-          sin.sin_port = __builtin_bswap16((unsigned short)command.tcp_session().port());
-          sin.sin_addr.s_addr = 0;
-          bind_wrapper(fd, (caddr_t)&sin, sizeof(sin), nullptr);
-        }
-
-        int st = command.tcp_session().session_type();
-        if (st >= TCP_LISTEN) {
-          listen_wrapper(fd, 5, nullptr);
-        }
-        if (st == TCP_SYN_RCVD && command.tcp_session().has_extra_packet()) {
-          // Inject SYN to move to SYN_RCVD
-          DoIpInput(command.tcp_session().extra_packet());
-        }
-        if (st >= TCP_ESTABLISHED && command.tcp_session().has_extra_packet()) {
-          // Inject packet to advance to ESTABLISHED or beyond
-          DoIpInput(command.tcp_session().extra_packet());
-        }
-        if (st == TCP_CLOSE_WAIT || st == TCP_FIN_WAIT_1 ||
-            st == TCP_FIN_WAIT_2 || st == TCP_TIME_WAIT ||
-            st == TCP_CLOSING || st == TCP_LAST_ACK) {
-          // Inject FIN or close to advance state.
-          if (command.tcp_session().has_extra_packet()) {
-            DoIpInput(command.tcp_session().extra_packet());
-          }
-        }
-        // Apply optional socket option BEFORE close (#115).
-        if (command.tcp_session().has_extra_sockopt()) {
-          const SetSocketOpt &sopt = command.tcp_session().extra_sockopt();
-          int level = 0, name = 0;
-          std::string val_data;
-          if (sopt.has_legacy()) {
-            level = sopt.legacy().level();
-            name = sopt.legacy().name();
-            if (sopt.legacy().has_val())
-              val_data = BuildSockOptVal(sopt.legacy().val());
-          } else if (sopt.has_sol_socket()) {
-            level = XNU_SOL_SOCKET;
-            name = sopt.sol_socket().name();
-            if (sopt.sol_socket().has_val())
-              val_data = BuildSockOptVal(sopt.sol_socket().val());
-          } else if (sopt.has_tcp()) {
-            level = XNU_IPPROTO_TCP;
-            name = sopt.tcp().name();
-            if (sopt.tcp().has_val())
-              val_data = BuildSockOptVal(sopt.tcp().val());
-          }
-          if (level || name) {
-            setsockopt_wrapper(fd, level, name, (caddr_t)val_data.data(),
-                               val_data.size(), nullptr);
-          }
-        }
-        // Close AFTER sockopt for FIN_WAIT/LAST_ACK states.
-        if (st == TCP_FIN_WAIT_1 || st == TCP_LAST_ACK) {
-          close_wrapper(fd, nullptr);
-          open_fds.erase(fd);
-        }
+        HandleTcpSession(command.tcp_session(), open_fds);
         break;
       }
-      case Command::kCfilAttach: {
-        // Content filter attach (#89) — attach content filter to socket.
-        // Uses SO_CFIL_SOCK_ID socket option (4368) to interact with cfil.
-        int cfil_id = command.cfil_attach().filter_id();
-        setsockopt_wrapper(command.cfil_attach().fd(),
-                           XNU_SOL_SOCKET,
-                           4368,    // SO_CFIL_SOCK_ID (no XNU public define)
-                           (caddr_t)&cfil_id, sizeof(cfil_id), nullptr);
+      case Command::kCfilQuery: {
+        // Item 11: SO_CFIL_SOCK_ID is get-only. Setting it, as this used to
+        // do, could never reach cfil at all. Reading it calls through to
+        // cfil_sock_id_from_socket, which is the real code.
+        uint64_t sock_id = 0;
+        socklen_t sock_id_len = sizeof(sock_id);
+        getsockopt_wrapper(command.cfil_query().fd(), XNU_SOL_SOCKET,
+                           XNU_SO_CFIL_SOCK_ID, (caddr_t)&sock_id,
+                           &sock_id_len, nullptr);
         break;
       }
       case Command::kFlowDivertConnect: {
-        // Flow divert (#89) — set SO_FLOW_DIVERT_TOKEN then connect.
-        int token = command.flow_divert_connect().flow_id();
-        setsockopt_wrapper(command.flow_divert_connect().fd(),
-                           XNU_SOL_SOCKET,
-                           4358,    // SO_FLOW_DIVERT_TOKEN
-                           (caddr_t)&token, sizeof(token), nullptr);
-        if (command.flow_divert_connect().has_target()) {
-          std::string addr_s = get_sockaddr(command.flow_divert_connect().target());
-          connect_wrapper(command.flow_divert_connect().fd(),
-                          (caddr_t)addr_s.data(), addr_s.size(), nullptr);
+        // Item 11: SO_FLOW_DIVERT_TOKEN wants a TLV stream, not four raw
+        // bytes. Without a control unit TLV in range, XNU stops in the token
+        // parser and never reaches flow_divert_pcb_init_internal.
+        const FlowDivertConnect &fdc = command.flow_divert_connect();
+        uint32_t ctl_unit =
+            1 + (fdc.ctl_unit() % (XNU_FLOW_DIVERT_GROUP_COUNT_MAX - 1));
+        std::string token =
+            FlowDivertTlv(XNU_FLOW_DIVERT_TLV_CTL_UNIT, ctl_unit);
+        if (fdc.has_aggregate_unit()) {
+          token += FlowDivertTlv(XNU_FLOW_DIVERT_TLV_AGGREGATE_UNIT,
+                                 fdc.aggregate_unit());
+        }
+        setsockopt_wrapper(fdc.fd(), XNU_SOL_SOCKET,
+                           XNU_SO_FLOW_DIVERT_TOKEN, (caddr_t)token.data(),
+                           token.size(), nullptr);
+        if (fdc.has_target()) {
+          std::string addr_s = get_sockaddr(fdc.target());
+          connect_wrapper(fdc.fd(), (caddr_t)addr_s.data(), addr_s.size(),
+                          nullptr);
         }
         break;
       }

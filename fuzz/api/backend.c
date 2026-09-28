@@ -100,6 +100,124 @@ __attribute__((visibility("default"))) bool init_proc(void) {
   return true;
 }
 
+int socket_wrapper(int domain, int type, int protocol, int* retval);
+int close_wrapper(int fd, int* retval);
+
+// These come last on purpose: sys/mbuf.h, which they drag in, turns m_type
+// into a macro and that collides with the forward declarations above.
+#include <sys/sockio.h>
+#include <net/if.h>
+#include <net/dlil.h>
+#include <net/classq/classq.h>
+#include <net/kpi_interface.h>
+#include <netinet/in.h>
+#include <net/necp.h>
+
+void proto_input_run(void);
+
+// necp_match_policy copies out a whole struct necp_aggregate_result, whose
+// definition is not visible to the harness. Callers use this to size the
+// output buffer they hand to the syscall.
+__attribute__((visibility("default"))) size_t necp_aggregate_result_size(void) {
+  return sizeof(struct necp_aggregate_result);
+}
+
+// The harness starts no kernel threads: kernel_thread_start is a stub. So
+// every packet the stack sends out over lo0 is queued on the DLIL main input
+// queue and then never delivered, which is why nothing the kernel emits has
+// ever come back in. This performs the work one pass of the main input thread
+// would have done, repeatedly, because delivering a segment usually makes the
+// stack emit the next one. Without it a local TCP handshake can never finish
+// inside a single iteration, and the queued mbufs simply leak.
+__attribute__((visibility("default"))) void drain_loopback_input(void) {
+  struct dlil_main_threading_info* inpm =
+      (struct dlil_main_threading_info*)dlil_main_input_thread;
+  if (inpm == NULL) {
+    return;
+  }
+  struct dlil_threading_info* inp = &inpm->inp;
+
+  // Bounded so that a stack which keeps answering itself cannot spin forever.
+  for (int pass = 0; pass < 8; pass++) {
+    classq_pkt_t pkt = CLASSQ_PKT_INITIALIZER(pkt);
+    struct mbuf* m = NULL;
+    struct mbuf* m_loop = NULL;
+    uint32_t m_cnt = 0;
+    uint32_t m_cnt_loop = 0;
+    int proto_req;
+
+    lck_mtx_lock(&inp->dlth_lock);
+    inp->dlth_flags &= ~DLIL_INPUT_WAITING;
+    proto_req = (inp->dlth_flags &
+                 (DLIL_PROTO_WAITING | DLIL_PROTO_REGISTER)) != 0;
+    m_cnt = qlen(&inp->dlth_pkts);
+    _getq_all(&inp->dlth_pkts, &pkt, NULL, NULL, NULL);
+    m = pkt.cp_mbuf;
+    m_cnt_loop = qlen(&inpm->lo_rcvq_pkts);
+    _getq_all(&inpm->lo_rcvq_pkts, &pkt, NULL, NULL, NULL);
+    m_loop = pkt.cp_mbuf;
+    inp->dlth_wtot = 0;
+    lck_mtx_unlock(&inp->dlth_lock);
+
+    if (m == NULL && m_loop == NULL && !proto_req) {
+      break;
+    }
+    // proto_register_input only queues the registration; the input thread is
+    // what actually installs it. Until this runs, proto_input has no handler
+    // for PF_INET or PF_INET6 and every packet arriving over lo0 is freed,
+    // so it has to happen before anything is delivered.
+    if (proto_req) {
+      proto_input_run();
+    }
+    if (m_loop != NULL) {
+      dlil_input_packet_list_extended(lo_ifp, m_loop, m_cnt_loop,
+                                      IFNET_MODEL_INPUT_POLL_OFF);
+    }
+    if (m != NULL) {
+      dlil_input_packet_list_extended(NULL, m, m_cnt,
+                                      IFNET_MODEL_INPUT_POLL_OFF);
+    }
+  }
+}
+
+// Give the loopback interface an IPv4 address plus the matching netmask.
+// In a real system this comes from userland configuration, which does not
+// exist in the harness, so without it there is no route to 127.0.0.1 and
+// no connection can ever be established locally. Returns true if lo0 now
+// owns 127.0.0.1. Interface addresses survive clear_all(), so one call is
+// enough for the lifetime of the process.
+__attribute__((visibility("default"))) bool configure_loopback_address(void) {
+  int fd = -1;
+  if (socket_wrapper(AF_INET, SOCK_DGRAM, 0, &fd) != 0 || fd < 0) {
+    return false;
+  }
+
+  struct ifreq ifr;
+  memset(&ifr, 0, sizeof(ifr));
+  strlcpy(ifr.ifr_name, "lo0", sizeof(ifr.ifr_name));
+  ifr.ifr_flags = (short)(IFF_UP | IFF_LOOPBACK | IFF_RUNNING | IFF_MULTICAST);
+  ioctl_wrapper(fd, SIOCSIFFLAGS, (char*)&ifr, NULL);
+
+  struct sockaddr_in* sin;
+
+  memset(&ifr.ifr_ifru, 0, sizeof(ifr.ifr_ifru));
+  sin = (struct sockaddr_in*)&ifr.ifr_addr;
+  sin->sin_len = sizeof(*sin);
+  sin->sin_family = AF_INET;
+  sin->sin_addr.s_addr = htonl(0xff000000u);  // 255.0.0.0
+  ioctl_wrapper(fd, SIOCSIFNETMASK, (char*)&ifr, NULL);
+
+  memset(&ifr.ifr_ifru, 0, sizeof(ifr.ifr_ifru));
+  sin = (struct sockaddr_in*)&ifr.ifr_addr;
+  sin->sin_len = sizeof(*sin);
+  sin->sin_family = AF_INET;
+  sin->sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+  int err = ioctl_wrapper(fd, SIOCSIFADDR, (char*)&ifr, NULL);
+
+  close_wrapper(fd, NULL);
+  return err == 0;
+}
+
 extern void kmem_mb_reset_pages(void);
 extern void fake_time_reset(void);
 extern void fake_uuid_reset(void);
@@ -108,6 +226,10 @@ extern char fake_thread[];
 extern char fake_uthread[];
 
 __attribute__((visibility("default"))) void clear_all() {
+  // Deliver or free whatever the stack left queued on the loopback input
+  // queue. Nothing else ever empties it, so without this the mbufs leak.
+  drain_loopback_input();
+
   // Run kernel timers to drain pending work.
   inpcb_timeout(NULL, NULL);
   key_timehandler();
@@ -137,12 +259,10 @@ __attribute__((visibility("default"))) void clear_all() {
   // them via SIOCDIFADDR_IN6. For now, the route timer expiry above
   // handles the most common side-effect (stale routes to added addresses).
 
-  // Reset PF state if it was enabled during this iteration.
-  // DIOCSTOP is idempotent — safe to call even if PF was never started.
-  {
-    extern const unsigned long diocstop_val;
-    ioctl_wrapper(0, diocstop_val, NULL, NULL);
-  }
+  // Drop PF states and rules and stop PF, so that one iteration cannot leave
+  // filtering state behind for the next one. The previous call went through a
+  // socket ioctl on descriptor 0 and never reached PF at all.
+  pf_flush_all();
 
   // Reset subsystem state for next iteration.
   kmem_mb_reset_pages();
@@ -161,54 +281,84 @@ __attribute__((visibility("default"))) void clear_all() {
 // directly accessing struct mbuf internals which are opaque in this TU.
 extern errno_t mbuf_setnext(mbuf_t mbuf, mbuf_t next);
 extern void mbuf_pkthdr_setlen(mbuf_t mbuf, size_t len);
+extern void m_freem(mbuf_t m);
 
 __attribute__((visibility("default"))) mbuf_t get_mbuf_data_chained(
     const char* data, size_t size, int pktflags,
     const uint32_t* split_points, int num_splits) {
-  if (num_splits <= 0 || !split_points) {
+  // Split points are absolute offsets into the packet. The old code treated
+  // them as segment lengths, which meant the chain could stop short of the
+  // packet while the header still claimed the full length.
+  enum { MAX_SPLITS = 16 };
+  size_t offsets[MAX_SPLITS];
+  int count = 0;
+
+  if (split_points != NULL && size > 1) {
+    for (int i = 0; i < num_splits && count < MAX_SPLITS; i++) {
+      size_t off = (size_t)(split_points[i] % size);
+      if (off == 0) {
+        continue;
+      }
+      int duplicate = 0;
+      for (int j = 0; j < count; j++) {
+        if (offsets[j] == off) {
+          duplicate = 1;
+          break;
+        }
+      }
+      if (!duplicate) {
+        offsets[count++] = off;
+      }
+    }
+    // Sort so the segments come out in packet order.
+    for (int i = 1; i < count; i++) {
+      size_t v = offsets[i];
+      int j = i - 1;
+      while (j >= 0 && offsets[j] > v) {
+        offsets[j + 1] = offsets[j];
+        j--;
+      }
+      offsets[j + 1] = v;
+    }
+  }
+
+  if (count == 0) {
     mbuf_t m = (mbuf_t)mbuf_create((const uint8_t*)data, size, true, false,
-                                    MT_DATA, pktflags);
-    if (m) mbuf_pkthdr_setrcvif(m, lo_ifp);
+                                   MT_DATA, pktflags);
+    if (m != NULL) {
+      mbuf_pkthdr_setrcvif(m, lo_ifp);
+    }
     return m;
   }
 
-  // First segment: header mbuf.
-  size_t first_len = split_points[0] % (size + 1);
-  if (first_len > size) first_len = size;
-  mbuf_t head = (mbuf_t)mbuf_create((const uint8_t*)data, first_len, true,
-                                     false, MT_DATA, pktflags);
-  if (!head) return NULL;
+  mbuf_t head = NULL;
+  mbuf_t prev = NULL;
+  size_t start = 0;
+  for (int i = 0; i <= count; i++) {
+    size_t end = (i < count) ? offsets[i] : size;
+    size_t seg_len = end - start;
+    mbuf_t seg = (mbuf_t)mbuf_create((const uint8_t*)(data + start), seg_len,
+                                     head == NULL, false, MT_DATA,
+                                     head == NULL ? pktflags : 0);
+    if (seg == NULL) {
+      // Never hand back a chain shorter than the length in its header: the
+      // stack would read past the data it was given.
+      if (head != NULL) {
+        m_freem(head);
+      }
+      return NULL;
+    }
+    if (head == NULL) {
+      head = seg;
+    } else {
+      mbuf_setnext(prev, seg);
+    }
+    prev = seg;
+    start = end;
+  }
+
   mbuf_pkthdr_setlen(head, size);
   mbuf_pkthdr_setrcvif(head, lo_ifp);
-
-  mbuf_t prev = head;
-  size_t offset = first_len;
-
-  for (int i = 1; i <= num_splits && offset < size; i++) {
-    size_t seg_len;
-    if (i < num_splits) {
-      seg_len = split_points[i] % (size - offset + 1);
-      if (seg_len == 0) seg_len = 1;
-    } else {
-      seg_len = size - offset;
-    }
-    if (offset + seg_len > size) seg_len = size - offset;
-
-    mbuf_t seg = (mbuf_t)mbuf_create((const uint8_t*)(data + offset), seg_len,
-                                      false, false, MT_DATA, 0);
-    if (!seg) break;
-    mbuf_setnext(prev, seg);
-    prev = seg;
-    offset += seg_len;
-  }
-
-  if (offset < size && prev != head) {
-    size_t remain = size - offset;
-    mbuf_t tail = (mbuf_t)mbuf_create((const uint8_t*)(data + offset), remain,
-                                       false, false, MT_DATA, 0);
-    if (tail) mbuf_setnext(prev, tail);
-  }
-
   return head;
 }
 
@@ -216,10 +366,14 @@ __attribute__((visibility("default"))) struct mbuf* get_mbuf_data(
     const char* data, size_t size, int pktflags) {
   struct mbuf* mbuf_data =
       mbuf_create((const uint8_t*)data, size, true, false, MT_DATA, pktflags);
+  if (mbuf_data == NULL) {
+    // The allocation can fail, and the receive interface must not be stored
+    // through a null pointer before the caller gets a chance to check.
+    return NULL;
+  }
 
-  // B6: Interface selection. Currently always loopback.
-  // When fake_ifp is initialized, use pktflags to select:
-  // PKTF_LOOP = loopback, otherwise = fake ethernet interface.
+  // The receive interface is always loopback: the harness never creates an
+  // ethernet interface, so there is nothing else to point at.
   mbuf_pkthdr_setrcvif((mbuf_t)mbuf_data, lo_ifp);
   return mbuf_data;
 }
@@ -244,6 +398,13 @@ __attribute__((visibility("default"))) bool initialize_network() {
   net_init_run();
   int res = necp_init();
   assert(!res);
+
+  // Install the pending protocol input registrations. proto_register_input
+  // only queues them for the DLIL input thread, which never runs here.
+  drain_loopback_input();
+
+  // Make DIOCSTART reachable; see the comment on this function.
+  pf_enable_purge_thread();
 
   // Content filter (#183): set gate variables so cfil_sock_attach proceeds.
   // cfil_init() can't be called directly — it requires kctl infrastructure.
