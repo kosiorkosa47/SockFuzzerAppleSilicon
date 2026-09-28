@@ -173,11 +173,11 @@ Overhead: ~35% exec/sec — acceptable tradeoff for catching bugs worth $100K+.
 
 | Subsystem | Source | Status |
 |---|---|---|
-| TCP (v4/v6) | tcp_input, tcp_output, tcp_subr, tcp_timer | Active |
+| TCP (v4/v6) | tcp_input, tcp_output, tcp_subr, tcp_timer | Active. The loopback handshake completes over IPv4, so states that need an accepted child socket are reachable. IPv6 has no `::1` configured, so there is no IPv6 route yet |
 | UDP (v4/v6) | udp_usrreq, udp6_usrreq, udp6_output | Active |
 | ICMP (v4/v6) | ip_icmp, icmp6 | Active |
 | IPv6 ext headers | frag6, dest6, route6 | Active |
-| PF firewall | pf, pf_ioctl, pf_norm, pf_table | Active |
+| PF firewall | pf, pf_ioctl, pf_norm, pf_table | Active. Reaches `pfioctl` through a narrow bridge with the real `pfioc_rule` and `pfioc_state_kill` structures. Previously every PF ioctl went through a socket descriptor and never reached PF at all |
 | NECP | necp, necp_client | Active — all 5 operations |
 | MPTCP | mptcp, mptcp_opt, mptcp_subr | Active |
 | Socket lifecycle | uipc_socket, uipc_socket2, uipc_syscalls | Active |
@@ -199,6 +199,30 @@ Measured on Apple M3 Pro, 24/7 campaign:
 | Edge coverage | 9,100+ |
 | Feature coverage | 44,700+ |
 | Corpus | ~4,700 files |
+
+### Reproducible cold start
+
+Campaign figures depend on how long the corpus has been growing, so they cannot
+be compared against each other. This one starts from an empty directory and is
+the same command every time:
+
+```bash
+mkdir -p /tmp/cold && ASAN_OPTIONS=detect_container_overflow=0:halt_on_error=0:detect_leaks=0 \
+  ./net_fuzzer /tmp/cold -runs=4000 -max_len=4096
+```
+
+| Metric | Value |
+|---|---|
+| Edge coverage | 7,100 to 7,800 |
+| Feature coverage | 15,700 to 17,900 |
+
+The range is the spread across three separate runs, not a margin of error. For
+reference, the same measurement returned 1,754 edges before the harness and
+grammar fixes described in ROADMAP.md.
+
+> **Corpus note:** `InAddr` and `Port` changed from protobuf enums to messages,
+> which changes their wire type. Corpus entries recorded before that change still
+> load, but no longer parse those two fields.
 
 ## Scripts
 

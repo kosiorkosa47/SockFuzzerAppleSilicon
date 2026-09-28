@@ -1,14 +1,69 @@
-# SockFuzzer Roadmap — Path to 11/10
+# SockFuzzer Roadmap
 
-Comprehensive issue tracker for bringing this XNU network stack fuzzer to
-world-class quality. Every item has a concrete description, affected files,
-and the rationale for why it matters.
+Issue tracker for this XNU network stack fuzzer. Every item has a concrete
+description, affected files, and the rationale for why it matters.
 
-**Current score: ~7.5/10** (solid P0-level fork with expanded attack surface).
+> **Status, audited 2026-09-28 against the code rather than against this file.**
+> Section A is complete. Section B is complete except B6, which was examined and
+> rejected for a documented reason. Sections C through G were not re-audited in
+> that pass, so treat their status as unknown rather than open.
+>
+> A caution learned the hard way: this document had drifted badly from the code.
+> Most of section A was already implemented while still being listed as "fix
+> immediately", and the two problems that actually stopped the fuzzer from
+> working were not listed at all. Check the code before trusting an entry here.
 
 ---
 
-## A. Bugs & Correctness (fix immediately)
+## A. Bugs & Correctness
+
+**Status: complete.** Every A item is implemented. Verified by reading the code,
+not by trusting the entries below.
+
+| Item | Where it landed |
+|---|---|
+| A1 `current_thread()` returned NULL | Returns `fake_thread`, `fuzz/fakes/thread.c` |
+| A2 `proc_pidversion` / `proc_limitgetcur` trapped | Implemented, `fuzz/fakes/fake_impls.c` |
+| A3 `timeout()` trapped | No-op, superseded by the deadline queue in `fuzz/fakes/timer.c` |
+| A4 Three clock functions were STUB_ABORT | Backed by the fake time counter |
+| A5 / A6 `net_flowhash*` trapped | Implemented, `fuzz/fakes/stubs.c` |
+| A7 `cc_clear` / `cc_cmp_safe` trapped | `memset` and `memcmp` |
+| A8 AES stubs were split brain | Made consistent |
+| A9 `san.c` trapped on unknown access type | Prints and returns |
+| A10 `enable_testing()` misplaced | Moved before `add_test()` |
+
+There are no STUB_ABORT uses left anywhere in `fuzz/`; only the macro
+definitions remain.
+
+### Problems that were NOT on this list and mattered more
+
+Both of these stopped the fuzzer outright while section A was still describing
+already-fixed cosmetics as urgent.
+
+**The build was broken.** `cmake/localize_syms.sh` hard-coded its input, output
+and scratch file names, and both the ASAN and the coverage pipeline called it.
+Under a parallel `ninja` the two clobbered each other and the coverage step
+renamed away the object the `net_fuzzer` link needed, so the link failed with
+`no such file or directory: libxnu_relocatable.o`. A serial build hid it
+completely. Fixed by parameterizing the script and giving each pipeline private
+filenames.
+
+**Runs died part way through.** `peeloff_wrapper`'s error return was ignored and
+the shared `retval` was trusted instead. XNU's `peeloff()` leaves `*retval`
+untouched on failure, so a failed call looked like it had returned descriptor 0,
+inserting a descriptor nobody opened into `open_fds`. A later genuine descriptor
+0 then tripped the duplicate-fd assertion and aborted the run, so the fuzzer
+never explored far. Fixed by checking the error first.
+
+**Also fixed:** `kmem_alloc_contig` was `assert(false)` despite being reachable
+from mbuf cluster allocation in `bsd/kern/uipc_mbuf.c`, and
+`mac_socket_check_send` was declared `void` where XNU declares a checked `int`,
+which on arm64 left the `kauth_cred_get()` argument in the return register and
+made send fail before reaching protocol code.
+
+---
+
+## A-archive. Original section A entries
 
 ### A1 — `current_thread()` returns NULL
 
@@ -93,6 +148,18 @@ and the rationale for why it matters.
 ---
 
 ## B. Fuzzing Effectiveness (new attack surface)
+
+**Status: complete except B6.** Audited against the code on 2026-09-28.
+
+| Item | Status |
+|---|---|
+| B1 TCP wire-format options | Done. `message TcpOption`, `repeated TcpOption options` in `TcpHdr`, `th_off` computed from header plus options size |
+| B2 Mbuf chain fuzzing | Done. One builder for every packet type, split points are absolute offsets, chains preserve total length |
+| B3 Structured PF ioctl data | Done. `PfIoctlRule` and `PfIoctlKillStates` serialize the real structures through a narrow `pfioctl` bridge |
+| B4 kqueue / kevent | Done. `Kqueue` and `Kevent` commands |
+| B5 `sockaddr_ctl` | Done. `SockAddrCtl` in the `SockAddr` oneof |
+| B6 Fake Ethernet interface | **Rejected, not deferred.** The field existed as `use_ethernet_if` and was never read. The harness only attaches `lo0`, so there is no Ethernet interface to point a received packet at. Field 1003 is now `reserved` with that reason recorded in the `.proto`. Reopening this means actually creating an interface, not restoring the field |
+
 
 ### B1 — TCP wire-format options
 
@@ -182,6 +249,21 @@ and the rationale for why it matters.
 ---
 
 ## C. State Management & Isolation
+
+**Partially audited on 2026-09-28.** Only the items below were checked; C1 and C2
+were not, so their status is unknown rather than open.
+
+| Item | Status |
+|---|---|
+| C3 PF state cleanup | Done. `clear_all()` calls `pf_flush_all()`, which drops states and rules and stops PF. The previous call went through a socket ioctl on descriptor 0 and never reached PF |
+| C4 Routing table flush | Partial. Route timers expire stale entries; a full flush would need `rtable_flush()`, which is not stubbed. The limitation is recorded in `clear_all()` |
+| C5 Interface address cleanup | Open. Addresses added via `SIOCAIFADDR_IN6_64` still persist across iterations. Recorded in `clear_all()` |
+
+Iteration teardown itself was rewritten: `TearDownIteration` now sweeps the whole
+synthetic descriptor table, so descriptors returned by paths that failed to
+update `open_fds` are closed too, and the loopback input queue is drained so its
+mbufs stop leaking.
+
 
 ### C1 — Fork-server integration
 
@@ -398,12 +480,40 @@ and the rationale for why it matters.
 
 ## Summary
 
-| Level | Items | Estimated Effort |
-|-------|-------|-----------------|
-| **8/10** — Publishable P0 fork | A1-A10 (correctness fixes) | ~4 hours |
-| **8.5/10** — Verified quality | D1-D5 (CI improvements) | ~6 hours |
-| **9/10** — Better than original P0 | B1-B10 (attack surface), C1-C5 (state mgmt) | ~3 weeks |
-| **10/10** — State of the art | F1-F5 (intelligence), E1-E4 (docs) | ~3-4 weeks |
-| **11/10** — Novel research | G1-G7 (concolic, races, patch-diff) | ~2-3 months |
+| Section | Status |
+|---------|--------|
+| A. Bugs & Correctness | Complete |
+| B. Fuzzing Effectiveness | Complete except B6, which was examined and rejected |
+| C. State Management & Isolation | C3 done, C4 partial, C5 open; C1 and C2 not audited |
+| D. CI & Infrastructure | Not audited |
+| E. Documentation | Not audited |
+| F. Advanced Techniques | Not audited |
+| G. Novel Research | Not audited |
 
-**Total: 52 items** from A1 to G7.
+The scoring scale that used to live here was removed. It invited rounding a
+number up after edits instead of checking whether the thing worked, which is how
+this file ended up listing solved problems as urgent while the fuzzer would not
+build.
+
+### Measured effect of the section A and B work
+
+Cold start, empty corpus, 4000 runs, same command each time:
+
+| Stage | Edges | Features |
+|---|---|---|
+| Starting point | 1754 | 2176 |
+| After the harness and grammar fixes | 6565 | 14502 |
+| After the loopback TCP handshake fix | 7130 to 7836 | 15763 to 17927 |
+
+The last row is the spread across three separate runs, so read it as roughly
+seven to eight thousand edges rather than one figure. Numbers taken from a
+populated corpus are not comparable to these.
+
+### Known open points
+
+- IPv6 has no `::1` configured on loopback, so the handshake has no route there.
+  IPv4 only, deliberately, with no half-finished IPv6 change.
+- `TCP_CLOSING` needs a peer that does not ACK our FIN, which a live loopback
+  socket cannot express.
+- Changing `InAddr` and `Port` from enums to messages changed their wire type, so
+  corpus entries recorded before that change no longer parse those fields.
