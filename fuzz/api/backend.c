@@ -111,9 +111,110 @@ int close_wrapper(int fd, int* retval);
 #include <net/classq/classq.h>
 #include <net/kpi_interface.h>
 #include <netinet/in.h>
+#include <netinet/in_pcb.h>
+#include <netinet/ip.h>
+#include <netinet/tcp.h>
 #include <net/necp.h>
 
 void proto_input_run(void);
+extern bool get_fuzzed_bool(void);
+
+struct fuzz_tcp4_lookup_context {
+  enum {
+    FUZZ_TCP4_LOOKUP_OFF,
+    FUZZ_TCP4_LOOKUP_INPUT,
+    FUZZ_TCP4_LOOKUP_CONNECT,
+  } mode;
+  bool valid;
+  bool input_selected;
+  struct in_addr src;
+  struct in_addr dst;
+  uint16_t sport;
+  uint16_t dport;
+};
+
+static struct fuzz_tcp4_lookup_context tcp4_lookup_context;
+
+bool fuzz_pcb_lookup_should_skip(struct inpcb* inp) {
+  if (tcp4_lookup_context.mode == FUZZ_TCP4_LOOKUP_OFF ||
+      !tcp4_lookup_context.valid) {
+    return get_fuzzed_bool();
+  }
+
+  bool exact =
+      inp->inp_faddr.s_addr == tcp4_lookup_context.src.s_addr &&
+      inp->inp_laddr.s_addr == tcp4_lookup_context.dst.s_addr &&
+      inp->inp_fport == tcp4_lookup_context.sport &&
+      inp->inp_lport == tcp4_lookup_context.dport;
+  bool listener =
+      inp->inp_faddr.s_addr == INADDR_ANY && inp->inp_fport == 0 &&
+      inp->inp_lport == tcp4_lookup_context.dport &&
+      (inp->inp_laddr.s_addr == INADDR_ANY ||
+       inp->inp_laddr.s_addr == tcp4_lookup_context.dst.s_addr);
+
+  if (tcp4_lookup_context.mode == FUZZ_TCP4_LOOKUP_CONNECT) {
+    return !exact;
+  }
+
+  if (!tcp4_lookup_context.input_selected && (exact || listener)) {
+    tcp4_lookup_context.input_selected = true;
+    return false;
+  }
+
+  // After tcp_input selects its socket, nested collision checks must only
+  // find an existing connected PCB with the same tuple. In particular, the
+  // new child and its listener are not collisions.
+  if (tcp4_lookup_context.input_selected && exact &&
+      inp->inp_faddr.s_addr != INADDR_ANY) {
+    return false;
+  }
+  return true;
+}
+
+static void set_tcp4_lookup_context(struct mbuf* m) {
+  struct ip ip_header;
+  struct tcphdr tcp_header;
+  tcp4_lookup_context.valid = false;
+  tcp4_lookup_context.input_selected = false;
+
+  if (m == NULL || m_pktlen(m) < sizeof(ip_header) + sizeof(tcp_header)) {
+    return;
+  }
+  m_copydata(m, 0, sizeof(ip_header), &ip_header);
+  if (ip_header.ip_v != IPVERSION ||
+      ip_header.ip_hl < sizeof(ip_header) / sizeof(uint32_t)) {
+    return;
+  }
+  size_t tcp_offset = (size_t)ip_header.ip_hl * sizeof(uint32_t);
+  if (m_pktlen(m) < tcp_offset + sizeof(tcp_header)) {
+    return;
+  }
+  m_copydata(m, (int)tcp_offset, sizeof(tcp_header), &tcp_header);
+  tcp4_lookup_context.src = ip_header.ip_src;
+  tcp4_lookup_context.dst = ip_header.ip_dst;
+  tcp4_lookup_context.sport = tcp_header.th_sport;
+  tcp4_lookup_context.dport = tcp_header.th_dport;
+  tcp4_lookup_context.valid = true;
+}
+
+__attribute__((visibility("default"))) int connect_tcp4_for_handshake(
+    int fd, const void* local_addr, const void* remote_addr,
+    size_t remote_len) {
+  const struct sockaddr_in* local = local_addr;
+  const struct sockaddr_in* remote = remote_addr;
+  tcp4_lookup_context.mode = FUZZ_TCP4_LOOKUP_CONNECT;
+  tcp4_lookup_context.valid = true;
+  tcp4_lookup_context.input_selected = false;
+  tcp4_lookup_context.src = remote->sin_addr;
+  tcp4_lookup_context.dst = local->sin_addr;
+  tcp4_lookup_context.sport = remote->sin_port;
+  tcp4_lookup_context.dport = local->sin_port;
+  int error = connect_wrapper(fd, (char*)remote_addr, remote_len, NULL);
+  tcp4_lookup_context.mode = FUZZ_TCP4_LOOKUP_OFF;
+  tcp4_lookup_context.valid = false;
+  tcp4_lookup_context.input_selected = false;
+  return error;
+}
 
 // necp_match_policy copies out a whole struct necp_aggregate_result, whose
 // definition is not visible to the harness. Callers use this to size the
@@ -129,12 +230,16 @@ __attribute__((visibility("default"))) size_t necp_aggregate_result_size(void) {
 // would have done, repeatedly, because delivering a segment usually makes the
 // stack emit the next one. Without it a local TCP handshake can never finish
 // inside a single iteration, and the queued mbufs simply leak.
-__attribute__((visibility("default"))) void drain_loopback_input(void) {
+static void drain_loopback_input_internal(bool tuple_aware) {
   struct dlil_main_threading_info* inpm =
       (struct dlil_main_threading_info*)dlil_main_input_thread;
   if (inpm == NULL) {
     return;
   }
+  tcp4_lookup_context.mode = tuple_aware ? FUZZ_TCP4_LOOKUP_INPUT
+                                         : FUZZ_TCP4_LOOKUP_OFF;
+  tcp4_lookup_context.valid = false;
+  tcp4_lookup_context.input_selected = false;
   struct dlil_threading_info* inp = &inpm->inp;
 
   // Bounded so that a stack which keeps answering itself cannot spin forever.
@@ -168,8 +273,13 @@ __attribute__((visibility("default"))) void drain_loopback_input(void) {
     // so it has to happen before anything is delivered.
     if (proto_req) {
       proto_input_run();
+      tcp4_lookup_context.valid = false;
+      tcp4_lookup_context.input_selected = false;
     }
     if (m_loop != NULL) {
+      if (tuple_aware) {
+        set_tcp4_lookup_context(m_loop);
+      }
       dlil_input_packet_list_extended(lo_ifp, m_loop, m_cnt_loop,
                                       IFNET_MODEL_INPUT_POLL_OFF);
     }
@@ -178,6 +288,18 @@ __attribute__((visibility("default"))) void drain_loopback_input(void) {
                                       IFNET_MODEL_INPUT_POLL_OFF);
     }
   }
+  tcp4_lookup_context.mode = FUZZ_TCP4_LOOKUP_OFF;
+  tcp4_lookup_context.valid = false;
+  tcp4_lookup_context.input_selected = false;
+}
+
+__attribute__((visibility("default"))) void drain_loopback_input(void) {
+  drain_loopback_input_internal(false);
+}
+
+__attribute__((visibility("default"))) void
+drain_loopback_input_for_tcp_handshake(void) {
+  drain_loopback_input_internal(true);
 }
 
 // Give the loopback interface an IPv4 address plus the matching netmask.

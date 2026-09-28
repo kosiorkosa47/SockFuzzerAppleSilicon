@@ -63,3 +63,5 @@ _sendto_nocancel_wrapper
 _necp_match_policy_wrapper
 _kmem_mb_reset_pages
 _cfil_active_count
+_drain_loopback_input_for_tcp_handshake
+_connect_tcp4_for_handshake

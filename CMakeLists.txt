@@ -516,6 +516,14 @@ set(BSD_SOURCES
     fuzz/fakes/mbuf.c
 )
 
+# The upstream fuzzing patch deliberately puts every PCB in one hash bucket
+# and chooses candidates using fuzzed booleans. The deterministic loopback
+# handshake supplies a tuple-aware choice through this source-specific hook.
+set_source_files_properties(
+  third_party/xnu/bsd/netinet/in_pcb.c
+  PROPERTIES COMPILE_DEFINITIONS SOCKFUZZER_PCB_LOOKUP_HOOK=1
+)
+
 set(XNU_INCLUDES
     .
     # Our stub headers must come BEFORE EXPORT_HDRS so that e.g.

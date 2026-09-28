@@ -1694,22 +1694,26 @@ static void HandleTcpSession(const TcpSession &ts, std::set<int> &open_fds) {
           BuildLoopbackSockaddr(domain, FUZZ_HTONS(client_port));
       bind_wrapper(client, (caddr_t)client_addr.data(), client_addr.size(),
                    nullptr);
-      connect_wrapper(client, (caddr_t)bind_addr.data(), bind_addr.size(),
-                      nullptr);
-      drain_loopback_input();
+      if (domain == XNU_AF_INET) {
+        connect_tcp4_for_handshake(client, client_addr.data(), bind_addr.data(),
+                                   bind_addr.size());
+      } else {
+        connect_wrapper(client, (caddr_t)bind_addr.data(), bind_addr.size(),
+                        nullptr);
+      }
+      drain_loopback_input_for_tcp_handshake();
       // Deliver what the stack just queued on lo0, which is what lets the
       // three way handshake actually complete. Ask accept for no peer
       // address: that would be one more copyout that can fail at random.
       int accepted = -1;
       accept_wrapper(listener, nullptr, nullptr, &accepted);
-      // TODO: measured on 2026-09-28, accept usually fails here. The SYN
-      // does reach tcp_input (tcps_rcvtotal increments) but tcps_accepts and
-      // tcps_listendrop both stay at 0, so tcp_input drops the segment
-      // somewhere between finding the pcb and calling sonewconn, even though
-      // the listener is verified to be in TCPS_LISTEN and bound to the right
-      // address and port. Until that drop is found, only the states that do
-      // not need a child socket are genuinely reached. Everything below is
-      // written to work with or without the child.
+      // SockFuzzer's upstream PCB lookup patch puts every PCB in one hash
+      // bucket and replaces tuple comparisons with fuzzed choices. With the
+      // data provider detached it used to select the connecting client for
+      // the inbound SYN, so tcp_input rejected the segment at its tuple
+      // consistency check before sonewconn. The tuple-aware drain keeps the
+      // fuzzed lookup for normal inputs but selects the matching listener,
+      // client, and child while this deterministic handshake runs.
       if (accepted >= 0) {
         child = accepted;
         open_fds.insert(child);
