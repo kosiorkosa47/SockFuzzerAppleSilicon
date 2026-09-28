@@ -114,6 +114,23 @@ kern_return_t kernel_memory_allocate(vm_map_t map, vm_offset_t *addrp,
   return KERN_SUCCESS;
 }
 
+// Same treatment as kernel_memory_allocate() above: there is no physical
+// memory model in the userland build, so "physically contiguous" carries no
+// extra meaning and a plain malloc satisfies the contract.
+//
+// mbuf cluster allocation (bsd/kern/uipc_mbuf.c) picks between the two
+// depending on its physContig argument, so leaving this one trapping meant a
+// run could die inside the allocator instead of reaching the code under test.
+kern_return_t kmem_alloc_contig(vm_map_t map, vm_offset_t *addrp,
+                                vm_size_t size, vm_offset_t mask,
+                                ppnum_t max_pnum, ppnum_t pnum_mask,
+                                kma_flags_t flags, vm_tag_t tag) {
+  void *p = malloc(size);
+  if (!p) return KERN_RESOURCE_SHORTAGE;
+  *addrp = (vm_offset_t)p;
+  return KERN_SUCCESS;
+}
+
 void lck_mtx_startup_init(struct lck_mtx_startup_spec *spec) {}
 
 void

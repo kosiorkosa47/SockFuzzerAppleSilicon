@@ -628,7 +628,8 @@ void kernel_debug(uint32_t debugid, uintptr_t arg1, uintptr_t arg2,
     uintptr_t arg3, uintptr_t arg4, uintptr_t arg5) {}
 
 void lck_rw_unlock_shared() {}
-kern_return_t kmem_alloc_contig() { assert(false); }
+// kmem_alloc_contig lives in osfmk_stubs.c, next to kernel_memory_allocate,
+// where vm/vm_kern.h supplies the real signature.
 uint32_t ipc_control_port_options;
 
 bool current_task_can_use_restricted_in_port() { return true; }

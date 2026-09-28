@@ -632,7 +632,7 @@ if(APPLE)
   add_custom_command(
     OUTPUT libxnu_relocatable.o
     COMMAND ld -r -arch ${CMAKE_SYSTEM_PROCESSOR} $<TARGET_OBJECTS:bsd> $<TARGET_OBJECTS:osfmk> -o libxnu_relocatable_raw.o
-    COMMAND /bin/bash ${CMAKE_CURRENT_SOURCE_DIR}/cmake/localize_syms.sh ${CMAKE_CURRENT_BINARY_DIR}/xnu_exported_symbols.txt
+    COMMAND /bin/bash ${CMAKE_CURRENT_SOURCE_DIR}/cmake/localize_syms.sh ${CMAKE_CURRENT_BINARY_DIR}/xnu_exported_symbols.txt libxnu_relocatable_raw.o libxnu_relocatable.o
     DEPENDS $<TARGET_OBJECTS:bsd> $<TARGET_OBJECTS:osfmk> ${CMAKE_CURRENT_BINARY_DIR}/xnu_exported_symbols.txt
     COMMAND_EXPAND_LISTS
     COMMENT "Creating relocatable XNU object with localized symbols"
@@ -817,9 +817,8 @@ if(NOT DEFINED ENV{SANITIZER} AND APPLE)
 
   add_custom_command(
     OUTPUT libxnu_cov_relocatable.o
-    COMMAND ld -r -arch ${CMAKE_SYSTEM_PROCESSOR} $<TARGET_OBJECTS:bsd_cov> $<TARGET_OBJECTS:osfmk_cov> -o libxnu_relocatable_raw.o
-    COMMAND /bin/bash ${CMAKE_CURRENT_SOURCE_DIR}/cmake/localize_syms.sh ${CMAKE_CURRENT_BINARY_DIR}/xnu_cov_exported_symbols.txt
-    COMMAND ${CMAKE_COMMAND} -E rename libxnu_relocatable.o libxnu_cov_relocatable.o
+    COMMAND ld -r -arch ${CMAKE_SYSTEM_PROCESSOR} $<TARGET_OBJECTS:bsd_cov> $<TARGET_OBJECTS:osfmk_cov> -o libxnu_cov_relocatable_raw.o
+    COMMAND /bin/bash ${CMAKE_CURRENT_SOURCE_DIR}/cmake/localize_syms.sh ${CMAKE_CURRENT_BINARY_DIR}/xnu_cov_exported_symbols.txt libxnu_cov_relocatable_raw.o libxnu_cov_relocatable.o
     DEPENDS $<TARGET_OBJECTS:bsd_cov> $<TARGET_OBJECTS:osfmk_cov> ${CMAKE_CURRENT_BINARY_DIR}/xnu_cov_exported_symbols.txt
     COMMAND_EXPAND_LISTS
     COMMENT "Creating coverage-instrumented XNU object with localized symbols"
