@@ -1995,13 +1995,21 @@ DEFINE_BINARY_PROTO_FUZZER(const Session &session) {
                             (caddr_t)sockaddr_s.data(), &size, &retval);
         break;
       }
-      case Command::kPeeloff:
-        peeloff_wrapper(command.peeloff().s(), command.peeloff().aid(),
-                        &retval);
-        if (retval >= 0) {
-          open_fds.insert(retval);
+      case Command::kPeeloff: {
+        // XNU's peeloff() leaves *retval untouched on failure, so the shared
+        // retval (reset to 0 each command) used to look like a successful
+        // descriptor 0. That inserted a never-opened fd into open_fds and made
+        // a later genuine fd 0 trip the duplicate-fd assertion. Check the
+        // error first, the same way the necp_open case does, and keep the
+        // result in a local so no stale value can leak in.
+        int peeled_fd = -1;
+        int peeloff_err = peeloff_wrapper(command.peeloff().s(),
+                                          command.peeloff().aid(), &peeled_fd);
+        if (peeloff_err == 0 && peeled_fd >= 0) {
+          open_fds.insert(peeled_fd);
         }
         break;
+      }
       case Command::kRecvfrom: {
         std::string sockaddr_s = get_sockaddr(command.recvfrom().from());
         int size = sockaddr_s.size();
