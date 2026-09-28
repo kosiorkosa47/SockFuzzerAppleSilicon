@@ -46,6 +46,22 @@
 #include "bsd/sys/resource.h"
 #include "bsd/uuid/uuid.h"
 
+#ifndef _KAUTH_CRED_T
+#define _KAUTH_CRED_T
+struct ucred;
+typedef struct ucred *kauth_cred_t;
+#endif
+
+struct fileglob;
+struct fileproc;
+struct flock;
+struct knote;
+struct pipe;
+struct sockaddr;
+struct socket;
+struct sockopt;
+struct vnode;
+
 extern void get_fuzzed_bytes(void* addr, size_t bytes);
 extern bool get_fuzzed_bool(void);
 
@@ -139,42 +155,24 @@ extern void* kernproc;
 
 void* vfs_context_proc() { return kernproc; }
 
-// Progressive time counter — advances on each call so timer-driven code
-// paths (retransmission, keepalive, route expiry) are actually exercised.
-// Reset to 0 is implicit: the counter persists across iterations which
-// mimics monotonic system time.
-uint64_t g_fake_time_counter = 1000000;  // start at 1ms in nanoseconds
-
-__attribute__((visibility("default")))
-void fake_time_reset(void) { g_fake_time_counter = 1000000; }
-
-uint64_t mach_continuous_time(void) {
-  g_fake_time_counter += 100000;  // advance 100us per call
-  return g_fake_time_counter;
+int mac_socket_check_accepted(kauth_cred_t cred, struct socket *so) {
+  return 0;
 }
 
-// TODO: handle timer scheduling
-void timeout() {}
-
-void microtime(struct timeval* tvp) {
-  g_fake_time_counter += 100000;
-  tvp->tv_sec = g_fake_time_counter / 1000000000ULL;
-  tvp->tv_usec = (g_fake_time_counter / 1000ULL) % 1000000ULL;
+int mac_socket_check_setsockopt(kauth_cred_t cred, struct socket *so,
+                                struct sockopt *sopt) {
+  return 0;
 }
 
-void microuptime(struct timeval* tvp) {
-  g_fake_time_counter += 100000;
-  tvp->tv_sec = g_fake_time_counter / 1000000000ULL;
-  tvp->tv_usec = (g_fake_time_counter / 1000ULL) % 1000000ULL;
+int mac_socket_check_bind(kauth_cred_t cred, struct socket *so,
+                          struct sockaddr *addr) {
+  return 0;
 }
 
-int mac_socket_check_accepted() { return 0; }
-
-int mac_socket_check_setsockopt() { return 0; }
-
-int mac_socket_check_bind() { return 0; }
-
-int mac_file_check_ioctl() { return 0; }
+int mac_file_check_ioctl(kauth_cred_t cred, struct fileglob *fg,
+                         unsigned long cmd) {
+  return 0;
+}
 
 int deflateInit2_() { return 0; }  // Z_OK
 int inflateInit2_() { return 0; }  // Z_OK
@@ -219,7 +217,10 @@ uint32_t hw_atomic_sub(volatile uint32_t *target, uint32_t delta) {
 
 void lck_mtx_destroy() {}
 
-int mac_socket_check_ioctl() { return 0; }
+int mac_socket_check_ioctl(kauth_cred_t cred, struct socket *so,
+                           unsigned long cmd) {
+  return 0;
+}
 
 bool proc_is64bit() { return true; }
 
@@ -293,48 +294,11 @@ void read_random(void* buffer, unsigned int numBytes) {
 
 int ml_get_max_cpus(void) { return 1; }
 
-void clock_interval_to_deadline(uint32_t interval, uint32_t scale_factor,
-                                uint64_t* result) {
-  *result = g_fake_time_counter + (uint64_t)interval * scale_factor;
-}
-
-void clock_interval_to_absolutetime_interval(uint32_t interval,
-                                             uint32_t scale_factor,
-                                             uint64_t* result) {
-  *result = (uint64_t)interval * scale_factor;
-}
-
-void* thread_call_allocate_with_options() { return (void*)1; }
-
-bool thread_call_enter_delayed_with_leeway() { return true; }
-
 void lck_rw_assert() {}
 
 uint32_t IOMapperIOVMAlloc() { return 0; }
 
 int proc_uniqueid() { return 0; }
-
-uint64_t mach_absolute_time() {
-  g_fake_time_counter += 100000;
-  return g_fake_time_counter;
-}
-
-void clock_get_calendar_microtime(uint32_t *secs, uint32_t *microsecs) {
-  g_fake_time_counter += 100000;
-  *secs = (uint32_t)(g_fake_time_counter / 1000000000ULL);
-  *microsecs = (uint32_t)((g_fake_time_counter / 1000ULL) % 1000000ULL);
-}
-
-void clock_get_uptime(uint64_t *result) {
-  g_fake_time_counter += 100000;
-  *result = g_fake_time_counter;
-}
-
-void clock_get_system_microtime(uint32_t *secs, uint32_t *microsecs) {
-  g_fake_time_counter += 100000;
-  *secs = (uint32_t)(g_fake_time_counter / 1000000000ULL);
-  *microsecs = (uint32_t)((g_fake_time_counter / 1000ULL) % 1000000ULL);
-}
 
 int proc_pid() { return 0; }
 
@@ -386,9 +350,14 @@ const char* proc_best_name() { return "kernproc"; }
 
 void* proc_find() { return kernproc; }
 
-int mac_socket_check_create() { return 0; }
+int mac_socket_check_create(kauth_cred_t cred, int domain, int type,
+                            int protocol) {
+  return 0;
+}
 
-int mac_socket_check_accept() { return 0; }
+int mac_socket_check_accept(kauth_cred_t cred, struct socket *so) {
+  return 0;
+}
 
 void ovbcopy(const char* from, char* to, size_t nbytes) {
   memmove(to, from, nbytes);
@@ -428,8 +397,6 @@ void SHA1Init(void *ctx) {}
 
 void SHA1Update(void *ctx, const void *data, unsigned int len) {}
 
-void* thread_call_allocate_with_priority() { return (void*)1; }
-
 void lck_grp_attr_free() {}
 
 void lck_grp_free() {}
@@ -454,8 +421,6 @@ void timevalsub(struct timeval *t1, const struct timeval *t2) {
   }
 }
 
-void thread_call_enter_delayed() {}
-
 void MD5Init(void *ctx) {}
 void MD5Update(void *ctx, const void *data, unsigned int len) {}
 void MD5Final(unsigned char* digest, void* ctx) {
@@ -472,40 +437,56 @@ void lck_rw_unlock_exclusive() {}
 
 bool IS_64BIT_PROCESS() { return true; }
 
-int mac_socket_check_listen() { return 0; }
+int mac_socket_check_listen(kauth_cred_t cred, struct socket *so) {
+  return 0;
+}
 
 void kauth_cred_ref() {}
 
 void in_stat_set_activity_bitmap() {}
 
-int mac_socket_check_getsockopt() { return 0; }
+int mac_socket_check_getsockopt(kauth_cred_t cred, struct socket *so,
+                                struct sockopt *sopt) {
+  return 0;
+}
 
-int mac_pipe_check_ioctl() { return 0; }
+int mac_pipe_check_ioctl(kauth_cred_t cred, struct pipe *cpipe,
+                         unsigned long cmd) {
+  return 0;
+}
 
-int mac_pipe_check_write() { return 0; }
+int mac_pipe_check_write(kauth_cred_t cred, struct pipe *cpipe) { return 0; }
 
-int mac_pipe_check_kqfilter() { return 0; }
+int mac_pipe_check_kqfilter(kauth_cred_t cred, struct knote *kn,
+                            struct pipe *cpipe) {
+  return 0;
+}
 
-int mac_pipe_label_init() { return 0; }
+void mac_pipe_label_init(struct pipe *cpipe) {}
 
-int mac_pipe_label_destroy() { return 0; }
+void mac_pipe_label_destroy(struct pipe *cpipe) {}
 
-int mac_pipe_check_read() { return 0; }
+int mac_pipe_check_read(kauth_cred_t cred, struct pipe *cpipe) { return 0; }
 
-int mac_pipe_check_stat() { return 0; }
+int mac_pipe_check_stat(kauth_cred_t cred, struct pipe *cpipe) { return 0; }
 
-int mac_pipe_label_associate() { return 0; }
+void mac_pipe_label_associate(kauth_cred_t cred, struct pipe *cpipe) {}
 
 int kauth_getuid() { return 0; }
 
 int kauth_getgid() { return 0; }
 
-int mac_pipe_check_select() { return 0; }
+int mac_pipe_check_select(kauth_cred_t cred, struct pipe *cpipe, int which) {
+  return 0;
+}
 
 void _aio_close() {}
 void unlink1() {}
 
-int mac_socket_check_connect() { return 0; }
+int mac_socket_check_connect(kauth_cred_t cred, struct socket *so,
+                             struct sockaddr *addr) {
+  return 0;
+}
 
 void ml_thread_policy() {}
 
@@ -518,20 +499,9 @@ void OSBacktrace() {}
 
 void lck_grp_attr_setdefault() {}
 
-void nanouptime(void *tp) {
-  g_fake_time_counter += 100000;
-  // struct timespec is opaque here — write through raw pointer.
-  // Layout: { long tv_sec; long tv_nsec; }
-  long *fields = (long *)tp;
-  fields[0] = (long)(g_fake_time_counter / 1000000000ULL);
-  fields[1] = (long)(g_fake_time_counter % 1000000000ULL);
-}
-
 void wakeup_one() {}
 
 int lck_mtx_try_lock_spin() { return 1; }
-
-void absolutetime_to_nanoseconds(uint64_t in, uint64_t* out) { *out = in; }
 
 void nwk_wq_enqueue(struct nwk_wq_entry* nwk_item) {
   nwk_item->func(nwk_item->arg);
@@ -546,7 +516,10 @@ void fulong() {}
 void ubc_cs_blob_deallocate() {}
 void proc_thread() {}
 void munge_user32_stat64() {}
-int mac_file_check_lock() { return 0; }
+int mac_file_check_lock(kauth_cred_t cred, struct fileglob *fg, int op,
+                        struct flock *fl) {
+  return 0;
+}
 void vnode_setsize() {}
 void vnode_setnocache() {}
 void kauth_authorize_fileop() {}
@@ -554,15 +527,20 @@ void VNOP_FSYNC() {}
 void tablefull() {}
 void vnode_recycle() {}
 void ipc_object_copyin() {}
-int mac_file_check_inherit() { return 0; }
+int mac_file_check_inherit(kauth_cred_t cred, struct fileglob *fg) { return 0; }
 void vnode_vid() {}
 void munge_user32_stat() {}
 void VNOP_OFFTOBLK() {}
-int mac_file_check_create() { return 0; }
+int mac_file_check_create(kauth_cred_t cred) { return 0; }
 void fileport_port_to_fileglob() {}
 void VNOP_SETATTR() {}
 void vfs_devblocksize() {}
-int mac_file_check_library_validation() { return 0; }
+int mac_file_check_library_validation(struct proc *proc, struct fileglob *fg,
+                                      off_t slice_offset,
+                                      user_long_t error_message,
+                                      size_t error_message_size) {
+  return 0;
+}
 void ubc_cs_blob_add() {}
 void vn_getpath() {}
 void ipc_port_release_send() {}
@@ -573,25 +551,36 @@ void ubc_cs_blob_allocate() {}
 void audit_sysclose() {}
 void vnode_is_openevt() {}
 void audit_arg_vnpath_withref() {}
-int mac_file_check_fcntl() { return 0; }
+int mac_file_check_fcntl(kauth_cred_t cred, struct fileglob *fg, int cmd,
+                         user_long_t arg) {
+  return 0;
+}
 void VNOP_ALLOCATE() {}
 void fg_vn_data_free() {}
 void VNOP_BLKTOOFF() {}
 void vnode_islnk() {}
 void VNOP_IOCTL() {}
-int mac_vnode_check_truncate() { return 0; }
-int mac_file_check_dup() { return 0; }
+int mac_vnode_check_truncate(vfs_context_t ctx, kauth_cred_t file_cred,
+                             struct vnode *vp) {
+  return 0;
+}
+int mac_file_check_dup(kauth_cred_t cred, struct fileglob *fg, int newfd) {
+  return 0;
+}
 void ubc_cs_blob_get() {}
 void audit_arg_vnpath() {}
 void get_task_ipcspace() {}
 void vn_rdwr() {}
-int mac_file_label_destroy() { return 0; }
+void mac_file_label_destroy(struct fileglob *fg) {}
 void fileport_alloc() {}
 void vnode_getwithref() {}
-int mac_file_label_associate() { return 0; }
+void mac_file_label_associate(kauth_cred_t cred, struct fileglob *fg) {}
 void sulong() {}
 void proc_lck_attr() {}
-int mac_vnode_check_write() { return 0; }
+int mac_vnode_check_write(vfs_context_t ctx, kauth_cred_t file_cred,
+                          struct vnode *vp) {
+  return 0;
+}
 void ipc_port_copyout_send() {}
 void kauth_filesec_free() {}
 void munge_user64_stat64() {}
@@ -602,10 +591,14 @@ void vn_stat_noauth() {}
 void vnode_mount() {}
 void open1() {}
 void kauth_authorize_fileop_has_listeners() {}
-void fp_isguarded() {}
+int fp_isguarded(struct fileproc *fp, unsigned int attributes) { return 0; }
 void audit_arg_fflags() {}
-int mac_vnode_notify_truncate() { return 0; }
-void fp_guard_exception() {}
+void mac_vnode_notify_truncate(vfs_context_t ctx, kauth_cred_t file_cred,
+                               struct vnode *vp) {}
+int fp_guard_exception(proc_t p, int fd, struct fileproc *fp,
+                       unsigned int attributes) {
+  return 0;
+}
 void vnode_clear_openevt() {}
 void pshm_stat() {}
 void proc_knhashlock_grp() {}
@@ -620,9 +613,11 @@ void mach_port_deallocate() {}
 int mac_file_label_init() { return 0; }
 void vn_pathconf() {}
 void audit_arg_mode() {}
-long boottime_sec() { return 0; }
 void mac_socket_check_receive() {}
-void mac_socket_check_send() {}
+int mac_socket_check_send(kauth_cred_t cred, struct socket *so,
+                          struct sockaddr *addr) {
+  return 0;
+}
 
 void kernel_debug(uint32_t debugid, uintptr_t arg1, uintptr_t arg2,
     uintptr_t arg3, uintptr_t arg4, uintptr_t arg5) {}

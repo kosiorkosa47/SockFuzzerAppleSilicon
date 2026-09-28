@@ -55,6 +55,7 @@ _mbuf_pkthdr_setlen
 _kqueue_wrapper
 _kevent_wrapper
 _fake_time_reset
+_fake_time_advance
 _fake_uuid_reset
 _fake_thread
 _sendmsg_wrapper

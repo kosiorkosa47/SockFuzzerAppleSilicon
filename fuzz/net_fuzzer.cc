@@ -41,6 +41,8 @@ extern "C" {
 #include "api/backend.h"
 #include "api/syscall_wrappers.h"
 #include "types.h"
+
+void fake_time_advance(void);
 }
 
 // XNU protocol/level constants — avoid magic numbers in handlers.
@@ -55,6 +57,7 @@ extern "C" {
 #define XNU_AF_MULTIPATH  39
 #define XNU_SOCK_STREAM   1
 #define XNU_SOCK_DGRAM    2
+#define XNU_MAX_OPEN_FDS  10
 
 // Helper: combine repeated MsgFlag enum into bitmask.
 template <typename T>
@@ -1350,6 +1353,27 @@ static void maybe_init_fork_server() {
   // See docs/SNAPSHOT_RESET.md for the design.
 }
 
+static void TearDownIteration(std::set<int> &open_fds,
+                              std::vector<uint32_t> &cids,
+                              bool resume_input) {
+  FuzzedDataProvider *saved_fdp = fdp;
+  fdp = nullptr;
+
+  // Scan the whole synthetic descriptor table. This also closes descriptors
+  // returned by paths that failed to update open_fds.
+  for (int fd = XNU_MAX_OPEN_FDS - 1; fd >= 0; --fd) {
+    close_wrapper(fd, nullptr);
+  }
+
+  open_fds.clear();
+  cids.clear();
+  clear_all();
+
+  if (resume_input) {
+    fdp = saved_fdp;
+  }
+}
+
 DEFINE_BINARY_PROTO_FUZZER(const Session &session) {
   if (!ready) {
     initialize_network();
@@ -1421,9 +1445,7 @@ DEFINE_BINARY_PROTO_FUZZER(const Session &session) {
         HandleDisconnectx(command, cids);
         break;
       case Command::kClearAll:
-        clear_all();
-        open_fds.clear();
-        cids.clear();
+        TearDownIteration(open_fds, cids, true);
         break;
       case Command::kNecpMatchPolicy: {
         std::unique_ptr<uint8_t[]> params(
@@ -1778,12 +1800,9 @@ DEFINE_BINARY_PROTO_FUZZER(const Session &session) {
       case Command::COMMAND_NOT_SET:
         break;
     }
+    fake_time_advance();
   }
 
-  for (int fd : open_fds) {
-    close_wrapper(fd, nullptr);
-  }
-
-  clear_all();
+  TearDownIteration(open_fds, cids, false);
 }
 }

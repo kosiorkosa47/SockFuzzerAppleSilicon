@@ -46,6 +46,3 @@ kern_return_t thread_policy_set() {
 
 // let caller read/write to fake thread
 void* get_bsdthread_info(thread_t thread) { return fake_uthread; }
-
-// callbacks
-void* thread_call_allocate() { return (void*)1; }

@@ -230,6 +230,8 @@ extern int num_ioctls;
 __attribute__((visibility("default"))) bool initialize_network() {
   kernel_startup_bootstrap();
   kernel_startup_initialize_upto(STARTUP_SUB_EARLY_BOOT);
+  extern void *socket_zone;
+  assert(socket_zone != NULL);
   mcache_init();
   mbinit();
   eventhandler_init();

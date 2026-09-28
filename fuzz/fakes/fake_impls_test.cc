@@ -171,19 +171,20 @@ TEST(kmem_mb_reset) {
 extern "C" {
 uint64_t mach_absolute_time(void);
 void fake_time_reset(void);
+void fake_time_advance(void);
 void fake_uuid_reset(void);
 }
 
 TEST(time_progresses) {
   fake_time_reset();
   uint64_t t1 = mach_absolute_time();
+  fake_time_advance();
   uint64_t t2 = mach_absolute_time();
+  // Clock reads are stable and explicit advancement moves time forward.
   uint64_t t3 = mach_absolute_time();
-  // Each call should advance time
   assert(t2 > t1);
-  assert(t3 > t2);
-  // Should advance by 100000 ns per call
-  ASSERT_EQ(t2 - t1, (uint64_t)100000);
+  ASSERT_EQ(t3, t2);
+  ASSERT_EQ(t2 - t1, (uint64_t)10000000);
 }
 
 TEST(time_reset) {
@@ -191,8 +192,8 @@ TEST(time_reset) {
   uint64_t t1 = mach_absolute_time();
   fake_time_reset();
   uint64_t t2 = mach_absolute_time();
-  // After reset, should be back near initial value
-  ASSERT_EQ(t1, t2);
+  // Iteration reset must not make monotonic time go backwards.
+  ASSERT_GT(t2, t1);
 }
 
 // --- UUID tests ---

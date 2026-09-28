@@ -511,6 +511,8 @@ set(BSD_SOURCES
     fuzz/fakes/stubs.c
     fuzz/fakes/thread.c
     fuzz/fakes/fake_impls.c
+    fuzz/fakes/timer.c
+    fuzz/fakes/startup_trampoline.c
     fuzz/fakes/mbuf.c
 )
 
@@ -620,7 +622,7 @@ if(APPLE)
   #
   # Step 1: ld -r to merge all objects
   # Step 2: nmedit -s (keep globals listed in file, localize rest)
-  find_program(NMEDIT nmedit REQUIRED)
+  find_program(NMEDIT nmedit)
 
   # Copy the exported symbols list into the build directory.
   configure_file(
@@ -704,15 +706,9 @@ protobuf_generate_cpp(NET_PROTO_SRCS NET_PROTO_HDRS fuzz/net_fuzzer.proto)
 # net_fuzzer executable
 # --------------------------------------------------------------------------
 if(APPLE)
-  # startup_trampoline.c is compiled without -nostdinc so it can use
-  # macOS system headers for Mach-O section introspection.
-  add_library(startup_trampoline OBJECT fuzz/fakes/startup_trampoline.c)
-  target_compile_options(startup_trampoline PRIVATE -g ${FUZZER_CXX_FLAGS})
-
   add_executable(
     net_fuzzer fuzz/net_fuzzer.cc ${NET_PROTO_SRCS} ${NET_PROTO_HDRS}
     ${CMAKE_CURRENT_BINARY_DIR}/libxnu_relocatable.o
-    $<TARGET_OBJECTS:startup_trampoline>
   )
   add_dependencies(net_fuzzer bsd osfmk xnu_obj)
   target_link_libraries(
@@ -779,7 +775,6 @@ if(BUILD_TESTS AND APPLE)
   target_include_directories(fake_impls_test PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
   target_link_libraries(fake_impls_test
     ${CMAKE_CURRENT_BINARY_DIR}/libxnu_relocatable.o
-    $<TARGET_OBJECTS:startup_trampoline>
     protobuf-mutator ${Protobuf_LIBRARIES}
     "-Wl,-undefined,dynamic_lookup"
   )
@@ -826,14 +821,9 @@ if(NOT DEFINED ENV{SANITIZER} AND APPLE)
   add_custom_target(xnu_cov_obj DEPENDS libxnu_cov_relocatable.o)
   add_dependencies(xnu_cov_obj bsd_cov osfmk_cov)
 
-  add_library(startup_trampoline_cov OBJECT fuzz/fakes/startup_trampoline.c)
-  target_compile_options(startup_trampoline_cov PRIVATE -g
-    -fprofile-instr-generate -fcoverage-mapping)
-
   add_executable(
     net_cov fuzz/net_fuzzer.cc ${NET_PROTO_SRCS} ${NET_PROTO_HDRS}
     ${CMAKE_CURRENT_BINARY_DIR}/libxnu_cov_relocatable.o
-    $<TARGET_OBJECTS:startup_trampoline_cov>
   )
   add_dependencies(net_cov bsd_cov osfmk_cov xnu_cov_obj)
   target_include_directories(net_cov PRIVATE

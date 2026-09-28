@@ -45,6 +45,20 @@
 #include <stdint.h>
 #include <string.h>
 
+#include "bsd/sys/kernel_types.h"
+
+#ifndef _KAUTH_CRED_T
+#define _KAUTH_CRED_T
+struct ucred;
+typedef struct ucred *kauth_cred_t;
+#endif
+
+struct componentname;
+struct sockaddr;
+struct socket;
+struct vnode;
+struct vnode_attr;
+
 int printf(const char* format, ...);
 int vprintf(const char* format, va_list ap);
 void free(void *ptr);
@@ -107,28 +121,6 @@ int cc_rand_generate(void *out, size_t outlen) {
 void check_actforsig() {}
 
 void clear_thread_rwlock_boost() {}
-
-void clock_absolutetime_interval_to_deadline(uint64_t interval, uint64_t *deadline) {
-  extern uint64_t g_fake_time_counter;
-  *deadline = g_fake_time_counter + interval;
-}
-
-void clock_continuoustime_interval_to_deadline(uint64_t interval, uint64_t *deadline) {
-  extern uint64_t g_fake_time_counter;
-  *deadline = g_fake_time_counter + interval;
-}
-
-void clock_deadline_for_periodic_event(uint64_t interval, uint64_t abstime, uint64_t *deadline) {
-  extern uint64_t g_fake_time_counter;
-  *deadline = g_fake_time_counter + interval;
-}
-
-void clock_get_calendar_nanotime(void *secs, void *nanosecs) {
-  extern uint64_t g_fake_time_counter;
-  g_fake_time_counter += 100000;
-  *(uint32_t *)secs = (uint32_t)(g_fake_time_counter / 1000000000ULL);
-  *(uint32_t *)nanosecs = (uint32_t)(g_fake_time_counter % 1000000000ULL);
-}
 
 
 void coalition_get_leader() {}
@@ -247,7 +239,9 @@ void ledger_info() {}
 
 void ledger_template_info() {}
 
-void mac_error_select() {}
+int mac_error_select(int error1, int error2) {
+  return error1 != 0 ? error1 : error2;
+}
 
 void mac_policy_list() {}
 
@@ -255,13 +249,16 @@ int mac_policy_list_conditional_busy() { return 0; }
 
 void mac_policy_list_unbusy() {}
 
-void mac_proc_check_ledger() {}
+int mac_proc_check_ledger(proc_t curp, proc_t target, int op) { return 0; }
 
-void mac_proc_check_signal() {}
+int mac_proc_check_signal(proc_t proc1, proc_t proc2, int signum) { return 0; }
 
-int mac_socket_check_received() { return 0; }
+int mac_socket_check_received(kauth_cred_t cred, struct socket *so,
+                              struct sockaddr *saddr) {
+  return 0;
+}
 
-int mac_socket_check_stat() { return 0; }
+int mac_socket_check_stat(kauth_cred_t cred, struct socket *so) { return 0; }
 
 unsigned int mac_system_enforce = 0;
 
@@ -284,18 +281,6 @@ int msleep(void *chan, void *mtx, int pri, const char *wmesg, void *ts) {
 int msleep0() { return 0; }
 
 int msleep1() { return 0; }
-
-void nanoseconds_to_absolutetime(uint64_t nanoseconds, uint64_t *result) {
-  *result = nanoseconds;
-}
-
-void nanotime(void *ts) {
-  extern uint64_t g_fake_time_counter;
-  g_fake_time_counter += 100000;
-  long *f = (long *)ts;
-  f[0] = (long)(g_fake_time_counter / 1000000000ULL);
-  f[1] = (long)(g_fake_time_counter % 1000000000ULL);
-}
 
 void pg_rele() {}
 
@@ -430,20 +415,6 @@ int thread_block() { return 0; }
 
 int thread_block_parameter() { return 0; }
 
-int thread_call_cancel() { return 0; }
-
-int thread_call_cancel_wait() { return 0; }
-
-int thread_call_enter() { return 0; }
-
-void thread_call_free() {}
-
-void thread_call_func_cancel() {}
-
-void thread_call_func_delayed() {}
-
-int thread_call_isactive() { return 0; }
-
 void thread_drop_ipc_override() {}
 
 void thread_drop_sync_ipc_override() {}
@@ -483,8 +454,6 @@ void thread_update_ipc_override() {}
 void thread_wakeup_thread() {}
 int tick = 10000;
 
-void timeout_with_leeway() {}
-
 void timespec_is_valid() {}
 
 int tsleep() { return 0; }
@@ -502,8 +471,6 @@ void tty_pgrp() {}
 void tvtoabstime() {}
 
 void unix_syscall_return() {}
-
-void untimeout() {}
 
 void vaddlog() {}
 
@@ -575,11 +542,22 @@ void kmem_free(void *map, void *addr, unsigned long size) { free(addr); }
 
 void cru2x() {}
 
-void mac_vnode_check_create() {}
+int mac_vnode_check_create(vfs_context_t ctx, struct vnode *dvp,
+                           struct componentname *cnp,
+                           struct vnode_attr *vap) {
+  return 0;
+}
 
-void mac_vnode_check_uipc_bind() {}
+int mac_vnode_check_uipc_bind(vfs_context_t ctx, struct vnode *dvp,
+                              struct componentname *cnp,
+                              struct vnode_attr *vap) {
+  return 0;
+}
 
-void mac_vnode_check_uipc_connect() {}
+int mac_vnode_check_uipc_connect(vfs_context_t ctx, struct vnode *vp,
+                                 struct socket *so) {
+  return 0;
+}
 
 void namei() {}
 
@@ -641,8 +619,6 @@ int aes_encrypt_key() { return 0; }
 int aes_encrypt_key_with_iv_gcm() { return 0; }
 
 int aes_encrypt_reset_gcm() { return 0; }
-
-int thread_call_enter1_delayed() { return 0; }
 
 void panic(const char *fmt, ...) {
   printf("KERNEL PANIC: ");
@@ -876,11 +852,6 @@ void vn_getpath_ext() {}
 void wakeup_all_with_inheritor() {}
 
 void registerSleepWakeInterest() {}
-
-void absolutetime_to_microtime(uint64_t abstime, uint32_t *secs, uint32_t *microsecs) {
-  *secs = (uint32_t)(abstime / 1000000000ULL);
-  *microsecs = (uint32_t)((abstime / 1000ULL) % 1000000ULL);
-}
 
 void thread_abort() {}
 const char *strnstr(const char *s, const char *find, size_t slen) {

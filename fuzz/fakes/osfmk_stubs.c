@@ -255,17 +255,10 @@ void host_statistics_init() {}
 
 boolean_t doprnt_hide_pointers = true;
 
-/* Stubs for functions and variables from startup.c (excluded on macOS arm64
- * build because it includes deeply nested i386 headers with x86 asm).
- *
- * kernel_startup_initialize_upto iterates the __DATA,__init_entry_set
- * section, which is populated by __STARTUP macros in XNU source files.
- * This is how zones, locks, etc. get created at boot. We call an
- * external helper (startup_iterate_section) compiled without -nostdinc
- * that uses getsectdata() to locate and iterate the entries. */
+/* Startup registration is implemented by startup_trampoline.c. */
 #include <kern/startup.h>
 
-/* Startup stubs — all no-ops for fuzzer build */
+/* The full kernel bootstrap remains outside the userspace fuzzer. */
 void kernel_startup_bootstrap(void) {}
 void kernel_and_kext_startup(void *param, int wait_result) {}
 vm_offset_t vm_kernel_addrperm = 0;
