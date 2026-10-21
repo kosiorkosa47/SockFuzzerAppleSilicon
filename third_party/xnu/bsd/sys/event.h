@@ -698,7 +698,15 @@ __options_decl(kn_status_t, uint16_t /* 12 bits really */, {
 	KN_SUPPRESSED     = 0x800,  /* event is suppressed during delivery */
 });
 
-#if __LP64__
+#if __LP64__ && LIBXNU_BUILD
+/*
+ * The 42-bit encoding sign-extends kernel pointers. Userland heap pointers
+ * sit above 2^41, so they came back truncated and kqueue-on-kqueue faulted.
+ */
+#define KNOTE_KQ_PACKED_BITS   64
+#define KNOTE_KQ_PACKED_SHIFT   0
+#define KNOTE_KQ_PACKED_BASE    0
+#elif __LP64__
 #define KNOTE_KQ_PACKED_BITS   42
 #define KNOTE_KQ_PACKED_SHIFT   0
 #define KNOTE_KQ_PACKED_BASE    0
