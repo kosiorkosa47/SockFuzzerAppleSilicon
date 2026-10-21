@@ -163,10 +163,15 @@ TEST(zalloc_from_zone) {
   struct zone* z = zinit(128, 1024, 128, "test_alloc");
   void* p = zalloc(z);
   ASSERT_NE(p, (void*)nullptr);
-  // Should be zero-filled (calloc)
+  // Plain zalloc does not zero in real XNU, so the fake poison-fills instead
+  // of zeroing, to expose code that uses the memory before writing it.
   char* c = (char*)p;
-  ASSERT_EQ(c[0], 0);
-  ASSERT_EQ(c[127], 0);
+  ASSERT_NE(c[0], 0);
+  // The whole element is usable (writable/readable).
+  c[0] = 0x11;
+  c[127] = 0x22;
+  ASSERT_EQ(c[0], 0x11);
+  ASSERT_EQ(c[127], 0x22);
   free(p);
 }
 

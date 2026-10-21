@@ -359,16 +359,41 @@ void zone_change() { return; }
  */
 #define ZALLOC_DEFAULT_SIZE 4096
 
-void* zalloc(struct zone* zone) {
+/*
+ * Real XNU hands back an uninitialized zone element unless Z_ZERO is
+ * requested; it does NOT zero by default.  The fakes used to calloc()
+ * everything, which silently papered over kernel bugs that allocate without
+ * Z_ZERO and then leak or use the uninitialized bytes (a whole class of
+ * info-leak bugs this fuzzer exists to find).
+ *
+ * To keep that masking from coming back by accident — a fresh page from the
+ * host allocator is often already zero — non-zeroed allocations are filled
+ * with a loud, non-zero poison byte.  Any code that reads it before writing
+ * gets deterministic garbage, and a poisoned value used as a pointer trips
+ * ASAN immediately.
+ */
+#define ZT_POISON_BYTE 0xAA
+
+/*
+ * Shared backing for zalloc()/zalloc_flags(): malloc + track, then either
+ * zero (Z_ZERO semantics) or poison-fill to mimic uninitialized memory.
+ */
+static void* zalloc_internal(struct zone* zone, bool zero) {
   size_t size = ZALLOC_DEFAULT_SIZE;
   if (zone != NULL && zone->z_elem_size > 0) {
     size = zone->z_elem_size;
   }
-  void *ptr = calloc(1, size);
+  void *ptr = malloc(size);
   if (ptr) {
+    memset(ptr, zero ? 0x00 : ZT_POISON_BYTE, size);
     zt_insert(ptr, zone, (uint32_t)size);
   }
   return ptr;
+}
+
+void* zalloc(struct zone* zone) {
+  // Plain zalloc() never zeroes in real XNU — poison to expose uninit use.
+  return zalloc_internal(zone, false);
 }
 
 void* zalloc_noblock(struct zone* zone) { return zalloc(zone); }
@@ -477,12 +502,22 @@ unsigned int pmap_find_phys(int pmap, uintptr_t va) { return (unsigned int)((va 
 // MALLOC / FREE — tracked
 // ============================================================================
 
+// M_ZERO lives in <bsd/sys/malloc.h>, which isn't included here. The BSD M_*
+// flags share their low bits with the zalloc Z_* flags, so M_ZERO == Z_ZERO
+// == 0x0004. (The old code tested bit 0x0001, which is actually M_NOWAIT — it
+// zeroed on the wrong flag and left genuine M_ZERO requests uninitialized.)
+#ifndef M_ZERO
+#define M_ZERO 0x0004
+#endif
+
 void* __MALLOC_ZONE(size_t size, int type, int flags,
                     vm_allocation_site_t* site) {
-  void *ptr;
-  if (flags & 1) ptr = calloc(1, size);  // M_ZERO = 0x0001
-  else ptr = malloc(size);
-  if (ptr) zt_insert(ptr, NULL, (uint32_t)size);
+  void *ptr = malloc(size);
+  if (ptr) {
+    // Honor M_ZERO; otherwise poison so uninitialized use is loud.
+    memset(ptr, (flags & M_ZERO) ? 0x00 : ZT_POISON_BYTE, size);
+    zt_insert(ptr, NULL, (uint32_t)size);
+  }
   return ptr;
 }
 
@@ -622,15 +657,18 @@ kalloc_ext(
 	zalloc_flags_t        flags,
 	vm_allocation_site_t  *site) {
   void *addr = malloc(req_size);
-  if (flags & Z_ZERO) {
-    bzero(addr, req_size);
+  if (addr) {
+    // Honor Z_ZERO; otherwise poison so uninitialized use is loud. (The old
+    // code bzero'd before the NULL check, a latent NULL deref on OOM.)
+    memset(addr, (flags & Z_ZERO) ? 0x00 : ZT_POISON_BYTE, req_size);
+    zt_insert(addr, NULL, (uint32_t)req_size);
   }
-  if (addr) zt_insert(addr, NULL, (uint32_t)req_size);
   return (struct kalloc_result){ .addr = addr, .size = req_size };
 }
 
 void *zalloc_flags(union zone_or_view zov, zalloc_flags_t flags) {
-  return zalloc(zov.zov_zone);
+  // Honor Z_ZERO: zero only when asked, otherwise poison like zalloc().
+  return zalloc_internal(zov.zov_zone, (flags & Z_ZERO) != 0);
 }
 
 #undef kheap_free_addr
@@ -653,7 +691,9 @@ void kheap_free_addr(
 }
 
 void *zalloc_permanent(vm_size_t size, vm_offset_t mask) {
-  void *ptr = malloc(size);
+  // Contract (zalloc.h): memory from zalloc_permanent() is always
+  // 0-initialized. Keep it zeroed — never poison this path.
+  void *ptr = calloc(1, size);
   if (ptr) zt_insert(ptr, NULL, (uint32_t)size);
   return ptr;
 }
