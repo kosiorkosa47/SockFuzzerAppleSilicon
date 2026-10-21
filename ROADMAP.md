@@ -162,7 +162,7 @@ code on 2026-09-28, B7 to B10 on 2026-10-21.
 | B6 Fake Ethernet interface | **Rejected, not deferred.** The field existed as `use_ethernet_if` and was never read. The harness only attaches `lo0`, so there is no Ethernet interface to point a received packet at. Field 1003 is now `reserved` with that reason recorded in the `.proto`. Reopening this means actually creating an interface, not restoring the field |
 | B7 recvmsg_x / sendmsg_x | Done. `RecvmsgX` and `SendmsgX` on fields 30 and 33, arrays of up to 8 `msghdr_x` with up to 4 iovs each |
 | B8 IOV in sendmsg | Done. `Sendmsg.extra_iovs` |
-| B9 Ancillary data | Partial. `Sendmsg.control` passes raw bytes, which rarely form a valid `cmsghdr` |
+| B9 Ancillary data | Done for sendmsg. `Sendmsg.cmsgs` builds framed cmsghdrs with correct cmsg_len and 4-byte alignment, including SCM_RIGHTS; traced to udp_check_pktinfo. `MsgX.control` for sendmsg_x is still raw bytes |
 | B10 IP options | Done. `IpHdr.ip_options`, with `ip_hl` computed from the option length |
 
 
@@ -314,6 +314,11 @@ mbufs stop leaking.
 ---
 
 ## D. CI & Infrastructure
+
+**Status, audited 2026-10-21.** D1, D2, D5 and D6 are done; D3 is done
+(corpus/seeds holds a committed set-cover seed corpus); D4 is partial
+(`scripts/triage.sh` groups by signature, not wired into a CI gate). The
+entries below are kept as the original descriptions.
 
 ### D1 — Run unit tests in CI
 
@@ -490,9 +495,9 @@ mbufs stop leaking.
 | Section | Status |
 |---------|--------|
 | A. Bugs & Correctness | Complete |
-| B. Fuzzing Effectiveness | Complete except B6 (rejected) and B9 (partial) |
+| B. Fuzzing Effectiveness | Complete except B6 (rejected); B9 done for sendmsg, raw bytes for sendmsg_x |
 | C. State Management & Isolation | C2 and C3 done, C4 done for cloned routes, C5 open, C1 open (placeholder only) |
-| D. CI & Infrastructure | D1 done (unit tests run in CI), D5 done (dependency caches); the rest not audited |
+| D. CI & Infrastructure | D1, D2, D3, D5, D6 done; D4 partial (triage groups by signature, no CI gate) |
 | E. Documentation | Not audited |
 | F. Advanced Techniques | Not audited |
 | G. Novel Research | Not audited |

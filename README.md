@@ -70,7 +70,7 @@ graph TD
 | **Stubs** | ~350 `assert(false)` traps | **Zero trapping stubs** — all safe no-ops or real impls |
 | **Zone allocator** | Simple malloc/free | **UAF, double-free, zone confusion detection** with ASAN quarantine |
 | **copyin/copyout** | Raw pointer casts | Named constants, null guards, EFAULT simulation |
-| **Kernel time** | Returns 0 | Progressive counter (+100us/call) |
+| **Kernel time** | Returns 0 | Fake clock, +10ms per command, fires due timers |
 | **Permissions** | Always root | **Fuzzed** — kauth_cred_issuser, priv_check_cred return random |
 | **Crypto** | Missing | Fuzzed digests (SHA1/MD5), AES key copy |
 | **Byte order** | Host order | **Network byte order** on all wire-format fields |
@@ -78,7 +78,7 @@ graph TD
 | **Packet types** | TCP/UDP/ICMP | + **IPv6 ext headers, MPTCP, PF firewall, NECP** |
 | **kqueue** | Not supported | **kevent64 syscall** fully wired |
 | **CI** | None | **GitHub Actions** — macOS + Linux, smoke test, coverage |
-| **Scripts** | None | 11 scripts — crash pipeline, triage, coverage, PoC generator |
+| **Scripts** | None | 13 scripts — campaign, crash pipeline, triage, coverage, PoC generator |
 | **Tests** | None | **5 CVE regression tests** + stub unit tests |
 | **Commits** | — | **112+ commits** of improvements |
 
@@ -121,7 +121,7 @@ cmake --build . && ctest --output-on-failure
 ### Linux (Debian / Ubuntu)
 
 ```bash
-apt-get install -y clang llvm cmake ninja-build protobuf-compiler libprotobuf-dev \
+apt-get install -y clang llvm lld cmake ninja-build protobuf-compiler libprotobuf-dev \
   libabsl-dev pkg-config
 git clone --recursive https://github.com/kosiorkosa47/SockFuzzerAppleSilicon.git
 cd SockFuzzerAppleSilicon
@@ -179,7 +179,7 @@ graph LR
     B --> C{"zfree()"}
     C -- "Already freed?" --> D["DOUBLE-FREE<br/>detected"]
     C -- "Wrong zone?" --> E["ZONE CONFUSION<br/>detected"]
-    C -- "OK" --> F["Quarantine<br/>4096 ring buffer"]
+    C -- "OK" --> F["Quarantine<br/>1024 ring buffer"]
     F --> G["ASAN poison<br/>freed memory"]
     G -- "Later access?" --> H["USE-AFTER-FREE<br/>ASAN report"]
 
@@ -198,7 +198,8 @@ graph LR
 XNU assertions, panics and zone bugs all write to stderr and abort, so
 libFuzzer saves the input like any other crash.
 
-Overhead: ~35% exec/sec — acceptable tradeoff for catching bugs worth $100K+.
+Overhead: ~25% exec/sec (the campaign table below shows 6,800 to 5,200) —
+acceptable for the extra bug classes it catches.
 
 ## Attack Surface
 
@@ -215,7 +216,7 @@ Overhead: ~35% exec/sec — acceptable tradeoff for catching bugs worth $100K+.
 | UNIX domain | uipc_usrreq | Active |
 | Pipes | sys_pipe | Active |
 | kqueue | kern_event (kevent64) | Active |
-| Content filter | content_filter | Active — cfil gate enabled |
+| Content filter | content_filter | Partial — only the SO_CFIL_SOCK_ID query is reachable; a filter cannot register without a kernel-control socket |
 | Flow divert | flow_divert | Partial |
 | IPsec | ipsec, esp_*, ah_* | Partial — crypto stubs |
 
