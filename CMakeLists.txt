@@ -879,9 +879,13 @@ if(NOT DEFINED ENV{SANITIZER} AND APPLE)
                     -Wno-deprecated-declarations
                     -fprofile-instr-generate -fcoverage-mapping
   )
+  # The XNU objects still call __asan_memcpy, __asan_memmove, __asan_loadN and
+  # friends through the KASAN memintrinsics. Without the ASAN runtime those
+  # stayed unresolved under -undefined dynamic_lookup, net_cov jumped to
+  # address 0 in the first bzero in mbinit, and every profile came out empty.
   target_link_libraries(
     net_cov
-    -fsanitize=fuzzer
+    -fsanitize=address,fuzzer
     -fprofile-instr-generate -fcoverage-mapping
     protobuf-mutator ${Protobuf_LIBRARIES}
     "-Wl,-undefined,dynamic_lookup"
