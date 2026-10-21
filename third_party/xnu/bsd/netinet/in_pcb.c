@@ -3044,7 +3044,10 @@ inp_calc_flowhash(struct inpcb *inp)
 	struct inpcb *tmp_inp = NULL;
 
 	// nedwill: just return a random number from fuzzed data
-	return RandomULong() % 8;
+	// Keep the small range so flowhash collisions stay likely, but never
+	// return 0: the real loop below retries until it is non-zero and
+	// tcp_output() VERIFYs that, so 0 was a harness-only assertion.
+	return (RandomULong() % 8) + 1;
 
 	if (inp_hash_seed == 0) {
 		inp_hash_seed = RandomULong();
