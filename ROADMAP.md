@@ -149,7 +149,8 @@ made send fail before reaching protocol code.
 
 ## B. Fuzzing Effectiveness (new attack surface)
 
-**Status: complete except B6.** Audited against the code on 2026-09-28.
+**Status: complete except B6 and part of B9.** B1 to B6 audited against the
+code on 2026-09-28, B7 to B10 on 2026-10-21.
 
 | Item | Status |
 |---|---|
@@ -159,6 +160,10 @@ made send fail before reaching protocol code.
 | B4 kqueue / kevent | Done. `Kqueue` and `Kevent` commands |
 | B5 `sockaddr_ctl` | Done. `SockAddrCtl` in the `SockAddr` oneof |
 | B6 Fake Ethernet interface | **Rejected, not deferred.** The field existed as `use_ethernet_if` and was never read. The harness only attaches `lo0`, so there is no Ethernet interface to point a received packet at. Field 1003 is now `reserved` with that reason recorded in the `.proto`. Reopening this means actually creating an interface, not restoring the field |
+| B7 recvmsg_x / sendmsg_x | Done. `RecvmsgX` and `SendmsgX` on fields 30 and 33, arrays of up to 8 `msghdr_x` with up to 4 iovs each |
+| B8 IOV in sendmsg | Done. `Sendmsg.extra_iovs` |
+| B9 Ancillary data | Partial. `Sendmsg.control` passes raw bytes, which rarely form a valid `cmsghdr` |
+| B10 IP options | Done. `IpHdr.ip_options`, with `ip_hl` computed from the option length |
 
 
 ### B1 — TCP wire-format options
@@ -483,9 +488,9 @@ mbufs stop leaking.
 | Section | Status |
 |---------|--------|
 | A. Bugs & Correctness | Complete |
-| B. Fuzzing Effectiveness | Complete except B6, which was examined and rejected |
-| C. State Management & Isolation | C3 done, C4 partial, C5 open; C1 and C2 not audited |
-| D. CI & Infrastructure | Not audited |
+| B. Fuzzing Effectiveness | Complete except B6 (rejected) and B9 (partial) |
+| C. State Management & Isolation | C3 done, C4 partial, C5 open, C1 open (placeholder only); C2 not audited |
+| D. CI & Infrastructure | D1 done (unit tests run in CI), D5 done (dependency caches); the rest not audited |
 | E. Documentation | Not audited |
 | F. Advanced Techniques | Not audited |
 | G. Novel Research | Not audited |
@@ -511,8 +516,9 @@ populated corpus are not comparable to these.
 
 ### Known open points
 
-- IPv6 has no `::1` configured on loopback, so the handshake has no route there.
-  IPv4 only, deliberately, with no half-finished IPv6 change.
+- Crash files from fork mode sometimes do not reproduce on their own, because
+  they depend on state left by earlier inputs in the same child. Those land in
+  the `no-repro` triage bucket. Per-input isolation (C1) is what would fix it.
 - `TCP_CLOSING` needs a peer that does not ACK our FIN, which a live loopback
   socket cannot express.
 - Changing `InAddr` and `Port` from enums to messages changed their wire type, so

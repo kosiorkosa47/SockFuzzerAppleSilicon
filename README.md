@@ -101,6 +101,23 @@ make -j$(sysctl -n hw.ncpu)
 
 Apple's Xcode Clang does not ship with libFuzzer — Homebrew LLVM is required.
 
+If even a trivial program fails to link with `tapi error: malformed file ...
+unknown architecture arm64e.x1`, the Command Line Tools SDK is newer than the
+`ld` from the selected Xcode. Point the toolchain at the Command Line Tools for
+the build, or switch permanently with
+`sudo xcode-select -s /Library/Developer/CommandLineTools`:
+
+```bash
+export DEVELOPER_DIR=/Library/Developer/CommandLineTools
+```
+
+### Unit tests
+
+```bash
+cmake .. -DBUILD_TESTS=ON   # plus the compiler flags above
+cmake --build . && ctest --output-on-failure
+```
+
 ### Linux (Debian / Ubuntu)
 
 ```bash
@@ -124,13 +141,24 @@ ASAN_OPTIONS=detect_container_overflow=0:halt_on_error=0:detect_leaks=0 \
   ./net_fuzzer corpus/ -artifact_prefix=crashes/ -max_len=4096
 ```
 
-### 24/7 campaign (recommended)
+### Continuous campaign (recommended)
 
 ```bash
-ASAN_OPTIONS=detect_container_overflow=0:halt_on_error=0:detect_leaks=0 \
-  nohup ./net_fuzzer corpus/ -artifact_prefix=crashes/ \
-  -max_len=4096 -jobs=0 -workers=2 > fuzzer.log 2>&1 &
+./scripts/campaign.sh -j 8 campaign/          # until Ctrl-C
+./scripts/campaign.sh -j 8 -t 86400 campaign/ # or for a day
 ```
+
+A crash never ends the run: libFuzzer runs in fork mode with
+`-ignore_crashes`, and new crash files are grouped by signature every few
+minutes. `campaign/` keeps the corpus, raw crashes, `triage/` (one directory
+per signature with a reproducer and report) and `fuzzer.log`, so the same
+directory continues a campaign. Signatures listed in `campaign/known.txt` are
+counted but no longer announced; it stays out of the repository so it can name
+bugs that are not public yet.
+
+`./scripts/triage.sh <crashes_dir>` groups any directory of crash files the
+same way. A signature is the bug kind plus the first three frames that are not
+sanitizer, libFuzzer or assertion plumbing.
 
 ### ASAN options explained
 
@@ -163,9 +191,12 @@ graph LR
 - **UAF detection**: Freed allocations enter a quarantine ring buffer. Memory is
   ASAN-poisoned — any access triggers an immediate ASAN report.
 - **Double-free detection**: Each allocation has a `freed` flag. Freeing twice
-  prints a diagnostic and lets ASAN catch the corruption.
+  aborts at the second free, so the crash file and stack point at it.
 - **Zone confusion**: `zfree()` validates that the pointer is returned to the
-  same zone it was allocated from. A mismatch is a kernel exploit primitive.
+  same zone it was allocated from, and aborts on a mismatch.
+
+XNU assertions, panics and zone bugs all write to stderr and abort, so
+libFuzzer saves the input like any other crash.
 
 Overhead: ~35% exec/sec — acceptable tradeoff for catching bugs worth $100K+.
 
@@ -173,7 +204,7 @@ Overhead: ~35% exec/sec — acceptable tradeoff for catching bugs worth $100K+.
 
 | Subsystem | Source | Status |
 |---|---|---|
-| TCP (v4/v6) | tcp_input, tcp_output, tcp_subr, tcp_timer | Active. The loopback handshake completes over IPv4, so states that need an accepted child socket are reachable. IPv6 has no `::1` configured, so there is no IPv6 route yet |
+| TCP (v4/v6) | tcp_input, tcp_output, tcp_subr, tcp_timer | Active. The loopback handshake completes over IPv4 and IPv6 (`::1` is configured on lo0), so states that need an accepted child socket are reachable in both families |
 | UDP (v4/v6) | udp_usrreq, udp6_usrreq, udp6_output | Active |
 | ICMP (v4/v6) | ip_icmp, icmp6 | Active |
 | IPv6 ext headers | frag6, dest6, route6 | Active |
@@ -229,7 +260,8 @@ grammar fixes described in ROADMAP.md.
 | Script | Purpose |
 |---|---|
 | `scripts/crash_pipeline.sh` | Minimize, triage, generate PoC, prepare Apple report |
-| `scripts/triage.sh` | Deduplicate crashes by stack trace hash |
+| `scripts/campaign.sh` | Continuous fork-mode campaign with periodic triage |
+| `scripts/triage.sh` | Group crashes by kind and top meaningful frames |
 | `scripts/coverage_analysis.sh` | Generate llvm-cov HTML report |
 | `scripts/benchmark.sh` | Measure exec/sec and coverage metrics |
 | `scripts/minimize.sh` | Corpus minimization |
