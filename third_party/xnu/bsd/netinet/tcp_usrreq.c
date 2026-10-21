@@ -531,6 +531,19 @@ tcp_usr_connectx_common(struct socket *so, int af,
 
 	VERIFY(dst != NULL);
 
+	/*
+	 * Backport of the upstream family guard (see tcp_usr_send): reject a
+	 * destination whose family does not match the socket. 20.6.0 let a bare
+	 * AF_INET dst on an AF_INET6 connectx reach tcp6_usr_connect, cache an
+	 * IPv4 route in in6p_route and panic in in6p_route_copyout. af is the
+	 * socket's family (AF_INET for tcp_usr_connectx, AF_INET6 for
+	 * tcp6_usr_connectx); a zero family stays a wildcard. Return before any
+	 * state is set so the error path needs no cleanup.
+	 */
+	if (dst->sa_family != 0 && dst->sa_family != af) {
+		return EAFNOSUPPORT;
+	}
+
 	ASSERT(!(inp->inp_flags2 & INP2_CONNECT_IN_PROGRESS));
 	inp->inp_flags2 |= INP2_CONNECT_IN_PROGRESS;
 
