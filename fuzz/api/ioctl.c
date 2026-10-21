@@ -476,12 +476,48 @@ __attribute__((visibility("default"))) int pf_ioctl_no_payload(
   return pfioctl(0, cmd, NULL, FREAD | FWRITE, kernproc);
 }
 
-// Drop every PF state and turn PF off again. Called during teardown so that
-// one iteration cannot leave rules or states behind for the next one.
+// Drop every PF state, source node and rule and turn PF off again. Called
+// during teardown so that one iteration cannot leave rules or states behind
+// for the next one.
+//
+// DIOCCLRSTATES only unlinks states. Each still holds a reference on its rule
+// until pf_purge_expired_states frees it, which is the purge thread's job, so
+// purge here or rules with state could never be freed. Rules then have to be
+// removed by hand: the bridge adds them with DIOCADDRULE to the inactive list,
+// which is never committed, and with DIOCCHANGERULE to the active list, and
+// nothing else ever takes them off either.
 __attribute__((visibility("default"))) void pf_flush_all(void) {
   struct fuzz_pf_kill_spec clear;
+  struct pf_ruleset* rs = &pf_main_ruleset;
+  struct pf_rule* rule;
 
   memset(&clear, 0, sizeof(clear));
   pf_ioctl_kill_states(DIOCCLRSTATES, &clear);
+  pf_ioctl_no_payload(DIOCCLRSRCNODES);
+
+  lck_rw_lock_shared(pf_perim_lock);
+  lck_mtx_lock(pf_lock);
+  pf_purge_expired_states(pf_status.states);
+  for (int i = 0; i < PF_RULESET_MAX; i++) {
+    while ((rule = TAILQ_FIRST(rs->rules[i].active.ptr)) != NULL) {
+      pf_rm_rule(rs->rules[i].active.ptr, rule);
+    }
+    while ((rule = TAILQ_FIRST(rs->rules[i].inactive.ptr)) != NULL) {
+      pf_rm_rule(rs->rules[i].inactive.ptr, rule);
+    }
+    rs->rules[i].active.rcount = 0;
+    rs->rules[i].inactive.rcount = 0;
+    // DIOCCHANGERULE bumps the active ticket, which used to carry over, so
+    // whether a later DIOCCHANGERULE with ticket 0 succeeded depended on the
+    // inputs run before it. Back to 0 every time.
+    rs->rules[i].active.ticket = 0;
+    rs->rules[i].inactive.ticket = 0;
+    rs->rules[i].inactive.open = 0;
+  }
+  // DIOCADDRULE counts NAT64 rules and only DIOCDELETERULE undoes it.
+  pf_nat64_configured = 0;
+  lck_mtx_unlock(pf_lock);
+  lck_rw_done(pf_perim_lock);
+
   pf_ioctl_no_payload(DIOCSTOP);
 }
