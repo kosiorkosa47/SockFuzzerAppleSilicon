@@ -1030,6 +1030,29 @@ tcp_usr_send(struct socket *so, int flags, struct mbuf *m,
 	tp = intotcpcb(inp);
 	TCPDEBUG1();
 
+	/*
+	 * Backport of the upstream guard (xnu-13432 / iOS 27.2, confirmed by
+	 * disassembly of the shipping kernel): a send on a socket that was never
+	 * connected has no flow hash, and without this check tcp_usr_send drove
+	 * tcp_output on it and tripped VERIFY(inp->inp_flowhash != 0). The real
+	 * 20.6.0 source this tree is based on predates the guard, so the fuzzer
+	 * kept rediscovering an assertion that no current kernel can reach, which
+	 * crowded out deeper exploration. Match the shipping behaviour: a
+	 * control-only or addressless send on an unconnected socket fails with
+	 * EAFNOSUPPORT.
+	 */
+	if (inp->inp_flowhash == 0 && nam == NULL) {
+		if (m != NULL) {
+			m_freem(m);
+		}
+		if (control != NULL) {
+			m_freem(control);
+			control = NULL;
+		}
+		error = EAFNOSUPPORT;
+		goto out;
+	}
+
 	calculate_tcp_clock();
 
 	if (net_mpklog_enabled) {
