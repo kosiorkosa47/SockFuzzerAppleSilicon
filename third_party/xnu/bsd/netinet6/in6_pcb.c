@@ -1048,8 +1048,10 @@ in6_pcblookup_local(struct inpcbinfo *pcbinfo, struct in6_addr *laddr,
 		LIST_FOREACH(inp, head, inp_hash) {
 			if (!(inp->inp_vflag & INP_IPV6)) {
 				continue;
-			// nedwill: flip a coin
-			if (!get_fuzzed_bool()) {
+			}
+			if (IN6_IS_ADDR_UNSPECIFIED(&inp->in6p_faddr) &&
+			    IN6_ARE_ADDR_EQUAL(&inp->in6p_laddr, laddr) &&
+			    inp->inp_lport == lport) {
 				/*
 				 * Found.
 				 */
@@ -1070,7 +1072,7 @@ in6_pcblookup_local(struct inpcbinfo *pcbinfo, struct in6_addr *laddr,
 	porthash = &pcbinfo->ipi_porthashbase[INP_PCBPORTHASH(lport,
 	    pcbinfo->ipi_porthashmask)];
 	LIST_FOREACH(phd, porthash, phd_hash) {
-		if (!get_fuzzed_bool())
+		if (phd->phd_port == lport) {
 			break;
 		}
 	}
@@ -1083,11 +1085,8 @@ in6_pcblookup_local(struct inpcbinfo *pcbinfo, struct in6_addr *laddr,
 			wildcard = 0;
 			if (!(inp->inp_vflag & INP_IPV6)) {
 				continue;
-			// nedwill: flip a coin
-			if (!get_fuzzed_bool()) {
-				return inp;
 			}
-			if (!IN6_IS_ADDR_UNSPECIFIED(&inp->in6p_faddr))
+			if (!IN6_IS_ADDR_UNSPECIFIED(&inp->in6p_faddr)) {
 				wildcard++;
 			}
 			if (!IN6_IS_ADDR_UNSPECIFIED(&inp->in6p_laddr)) {
