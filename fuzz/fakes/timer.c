@@ -71,6 +71,12 @@ uint64_t g_fake_time_counter = 1000000ULL;
 
 extern int hz;
 
+// Defined in fake_impls.c: drains the deferred network work queue. The real
+// nwk_wq worker thread runs its callbacks asynchronously, so the harness queues
+// them at enqueue time and runs them here, once per command, alongside the
+// deferred timer work.
+extern void fake_nwk_wq_drain(void);
+
 static uint64_t
 fake_add_saturating(uint64_t left, uint64_t right)
 {
@@ -455,6 +461,7 @@ fake_time_advance(void)
   g_fake_time_counter = fake_add_saturating(g_fake_time_counter,
                                              FAKE_COMMAND_INTERVAL_NS);
   fake_dispatch_due_timers();
+  fake_nwk_wq_drain();
 }
 
 __attribute__((visibility("default")))

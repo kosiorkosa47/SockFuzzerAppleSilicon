@@ -503,9 +503,58 @@ void wakeup_one() {}
 
 int lck_mtx_try_lock_spin() { return 1; }
 
+// The real network work queue (bsd/net/nwk_wq.c) hands work to a dedicated
+// worker thread that runs the callbacks later, outside the caller's locks.
+// Running them synchronously here (as a naive stub would) re-enters the
+// caller's critical section -- route.c, in6.c and if.c all enqueue work while
+// holding locks that are no-op stubs in this harness -- a re-entrancy that is
+// impossible on real hardware and that can manufacture false use-after-free
+// reports. Instead we defer the work onto a bounded queue and drain it from
+// fake_time_advance() once per command (see fake_nwk_wq_drain), matching the
+// real "runs later on another thread" semantics without the re-entrancy.
+#define FAKE_NWK_WQ_LIMIT 256
+#define FAKE_NWK_WQ_DRAIN_LIMIT 4096
+
+static struct nwk_wq_entry *g_nwk_wq_items[FAKE_NWK_WQ_LIMIT];
+static unsigned int g_nwk_wq_head;
+static unsigned int g_nwk_wq_count;
+
 void nwk_wq_enqueue(struct nwk_wq_entry* nwk_item) {
-  nwk_item->func(nwk_item->arg);
-  free(nwk_item);
+  if (g_nwk_wq_count == FAKE_NWK_WQ_LIMIT) {
+    // Queue full: drop (free without running) the oldest pending item to make
+    // room for the new one. This is a safety valve that should not trigger in
+    // practice -- the queue is drained once per command and 256 outstanding
+    // items is generous. Dropping the oldest keeps the most recently requested
+    // work and never runs a callback inline, so it cannot reintroduce the
+    // re-entrancy this deferral exists to avoid.
+    struct nwk_wq_entry *dropped = g_nwk_wq_items[g_nwk_wq_head];
+    g_nwk_wq_head = (g_nwk_wq_head + 1) % FAKE_NWK_WQ_LIMIT;
+    --g_nwk_wq_count;
+    free(dropped);
+  }
+  unsigned int tail = (g_nwk_wq_head + g_nwk_wq_count) % FAKE_NWK_WQ_LIMIT;
+  g_nwk_wq_items[tail] = nwk_item;
+  ++g_nwk_wq_count;
+}
+
+// Run every deferred nwk_wq callback and clear the queue. Called once per
+// command from fake_time_advance(). Items are popped before their callback
+// runs, so a callback that enqueues more work (appended at the tail) is drained
+// by a later loop iteration; the FAKE_NWK_WQ_DRAIN_LIMIT cap guarantees
+// termination even if callbacks keep re-enqueuing. Per-item processing matches
+// the real worker thread and the previous inline stub: run func(arg), then free
+// the entry (all in-tree callers set is_arg_managed = TRUE, so arg lives inside
+// the same allocation and is not freed separately).
+void fake_nwk_wq_drain(void) {
+  unsigned int processed = 0;
+  while (g_nwk_wq_count > 0 && processed < FAKE_NWK_WQ_DRAIN_LIMIT) {
+    struct nwk_wq_entry *nwk_item = g_nwk_wq_items[g_nwk_wq_head];
+    g_nwk_wq_head = (g_nwk_wq_head + 1) % FAKE_NWK_WQ_LIMIT;
+    --g_nwk_wq_count;
+    nwk_item->func(nwk_item->arg);
+    free(nwk_item);
+    ++processed;
+  }
 }
 
 int ppsratecheck() { return 1; }
