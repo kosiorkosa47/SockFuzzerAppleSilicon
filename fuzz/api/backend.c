@@ -72,6 +72,7 @@ errno_t necp_init(void);
 void in_rtqtimo(void* targ);
 void in_rtqdrain(void);
 void in6_rtqdrain(void);
+boolean_t so_cache_timer(void);
 void* nstat_idle_check(void* p0, void* p1);
 
 extern int dlil_verbose;
@@ -486,6 +487,17 @@ __attribute__((visibility("default"))) void clear_all() {
   // Reap time-wait and dead TCP pcbs before the clock is wound back, or
   // their 2MSL deadline is never reached and they carry into the next input.
   tcp_fuzzer_reap();
+  // Free the sockets parked on so_cache_head. sodealloc parks TCP/IPv4
+  // sockets there for reuse, and so_cache_timer frees them only once they
+  // are SO_CACHE_TIME_LIMIT seconds old by net_uptime, which never happens
+  // because tcp_fuzzer_reset winds net_uptime back to 0. Each call frees at
+  // most SO_CACHE_MAX_FREE_BATCH; the cache holds at most MAX_CACHED_SOCKETS.
+  _net_uptime += SO_CACHE_TIME_LIMIT + 1;
+  for (int i = 0; i <= MAX_CACHED_SOCKETS / SO_CACHE_MAX_FREE_BATCH; i++) {
+    if (!so_cache_timer()) {
+      break;
+    }
+  }
   tcp_fuzzer_reset();
   frag6_timeout();
   mld_timeout();
