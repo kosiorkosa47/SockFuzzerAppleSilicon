@@ -2224,7 +2224,14 @@ recvmsg_x(struct proc *p, struct recvmsg_x_args *uap, user_ssize_t *retval)
 	 * Support only a subset of message flags
 	 */
 	if (uap->flags & ~(MSG_PEEK | MSG_WAITALL | MSG_DONTWAIT | MSG_NEEDSA |  MSG_NBIO)) {
-		return EOPNOTSUPP;
+		/*
+		 * Go through out: like every other error here, so the reference
+		 * file_socket() took above is dropped. A bare return kept the
+		 * descriptor's iocount raised, and the harness's close() then
+		 * spun forever in fileproc_drain().
+		 */
+		error = EOPNOTSUPP;
+		goto out;
 	}
 	/*
 	 * Input parameter range check
