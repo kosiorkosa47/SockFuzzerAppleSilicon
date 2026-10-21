@@ -2235,9 +2235,13 @@ DEFINE_BINARY_PROTO_FUZZER(const Session &session) {
       }
       case Command::kMptcpSetsockopt: {
         int svc_type = command.mptcp_setsockopt().service_type();
+        // MPTCP_SERVICE_TYPE is handled in mptcp_setopt, which sosetoptlock
+        // reaches through pr_ctloutput only when the level is not SOL_SOCKET.
+        // At SOL_SOCKET socheckopt rejected it with ENOPROTOOPT, so the whole
+        // option path was dead.
         setsockopt_wrapper(command.mptcp_setsockopt().fd(),
-                           XNU_SOL_SOCKET,
-                           0x0213,  // MPTCP_SERVICE_TYPE_OPT
+                           XNU_IPPROTO_TCP,
+                           0x0213,  // MPTCP_SERVICE_TYPE
                            (caddr_t)&svc_type, sizeof(svc_type), nullptr);
         break;
       }
