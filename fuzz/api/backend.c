@@ -90,7 +90,9 @@ __attribute__((visibility("default"))) bool init_proc(void) {
   plimit0.pl_rlimit[RLIMIT_NOFILE].rlim_max = 10;
   kernproc->p_limit = &plimit0;
   filedesc0.fd_cmask = cmask;
-  filedesc0.fd_knlistsize = -1;
+  // Must be 0 as in bsd_init.c. kern_event.c compares against it as u_int,
+  // so -1 made every fd look in range of the NULL fd_knlist.
+  filedesc0.fd_knlistsize = 0;
   filedesc0.fd_knlist = NULL;
   filedesc0.fd_knhash = NULL;
   filedesc0.fd_knhashmask = 0;
