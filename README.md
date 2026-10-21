@@ -262,7 +262,8 @@ grammar fixes described in ROADMAP.md.
 | `scripts/crash_pipeline.sh` | Minimize, triage, generate PoC, prepare Apple report |
 | `scripts/campaign.sh` | Continuous fork-mode campaign with periodic triage |
 | `scripts/triage.sh` | Group crashes by kind and top meaningful frames |
-| `scripts/coverage_analysis.sh` | Generate llvm-cov HTML report |
+| `scripts/coverage_report.sh` | Per-input XNU coverage of a corpus, with a per-subsystem table |
+| `scripts/coverage_analysis.sh` | Uncovered functions and corpus minimization |
 | `scripts/benchmark.sh` | Measure exec/sec and coverage metrics |
 | `scripts/minimize.sh` | Corpus minimization |
 | `scripts/reproduce.sh` | Reproduce a specific crash |
@@ -284,17 +285,30 @@ The `tests/regression/` directory contains reproducer inputs for known XNU CVEs:
 | CVE-2021-1782 | Mach vouchers | Type confusion |
 | CVE-2022-32893 | WebKit (via net) | OOB write |
 
-## Coverage Reports
+## Coverage
 
-Both `net_fuzzer` (ASAN) and `net_cov` (coverage) binaries are built:
+Line coverage of the XNU sources over the committed seed set
+(`corpus/seeds/`, 1086 inputs), measured with `net_cov`:
+
+| Area | Lines covered | Line % |
+|---|---|---|
+| bsd/netinet | 12400/50315 | 24.6% |
+| bsd/netinet6 | 5220/38843 | 13.4% |
+| bsd/net | 9982/82477 | 12.1% |
+| bsd/kern | 7330/38087 | 19.2% |
+| All instrumented code | 45580/312044 | 14.6% |
+
+CI recomputes this table on every push to main and shows it in the macOS
+job summary, with the HTML report as the `coverage-report-macos` artifact.
+To reproduce locally:
 
 ```bash
-# Run corpus through coverage binary
-./net_cov corpus/
-llvm-profdata merge -sparse default.profraw -o default.profdata
-llvm-cov show -format=html -output-dir=report -instr-profile=default.profdata net_cov
-llvm-cov report -instr-profile=default.profdata net_cov  # summary
+./scripts/coverage_report.sh corpus/seeds build/net_cov coverage_report
+open coverage_report/html/index.html
 ```
+
+Each input runs in its own process. In one process, state from earlier
+inputs can make a later one abort, and an abort loses the whole profile.
 
 ## Extending
 

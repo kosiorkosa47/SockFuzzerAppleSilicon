@@ -41,6 +41,22 @@ jobs:
       - name: Unit tests
         run: cd build && ctest --output-on-failure
 
+      - name: Coverage over the seed corpus
+        run: |
+          ./scripts/coverage_report.sh corpus/seeds build/net_cov build/coverage_report
+          {
+            echo "## XNU line coverage over corpus/seeds"
+            echo ""
+            cat build/coverage_report/subsystems.md
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report-macos
+          path: build/coverage_report/
+
       - name: Smoke test (10 second fuzz run)
         run: |
           cd build
