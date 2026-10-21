@@ -775,21 +775,55 @@ target_compile_options(
 # Unit tests — opt-in via -DBUILD_TESTS=ON (macOS only)
 # --------------------------------------------------------------------------
 # Compiling fakes into a separate test binary causes XNU header conflicts
-# (BSD vs OSFMK typedef clashes). Tests link against the full
-# libxnu_relocatable.o on macOS which has all symbols available.
-# CI validates correctness via the fuzzer smoke test.
-if(BUILD_TESTS AND APPLE)
+# (BSD vs OSFMK typedef clashes), so the test links against the XNU objects.
+# Not libxnu_relocatable.o, though: that hides every symbol off the fuzzer's
+# export list, and ld -r already turns hidden symbols local, so copyout,
+# zalloc and most of what the test calls were unreachable and
+# -undefined dynamic_lookup left those calls jumping to address 0. A test-only
+# object keeps them private extern, so they bind when the test is linked and
+# are still not exported from it. The few libc names XNU defines
+# (mach_absolute_time, uuid_generate*, abort) are the fakes the test means to
+# call anyway.
+if(BUILD_TESTS)
   enable_testing()
+  # The syscall wrapper generator test reads bsd/kern/syscalls.master
+  # relative to the XNU tree and needs nothing built.
+  find_package(Python3 COMPONENTS Interpreter)
+  if(Python3_FOUND)
+    add_test(NAME generate_syscall_api_test
+      COMMAND ${Python3_EXECUTABLE}
+              ${CMAKE_CURRENT_SOURCE_DIR}/fuzz/gen/generate_syscall_api_test.py
+      WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/third_party/xnu)
+  endif()
+endif()
+
+if(BUILD_TESTS AND APPLE)
+  add_custom_command(
+    OUTPUT libxnu_test_relocatable.o
+    COMMAND ld -r -keep_private_externs -arch ${CMAKE_SYSTEM_PROCESSOR} $<TARGET_OBJECTS:bsd> $<TARGET_OBJECTS:osfmk> -o libxnu_test_relocatable.o
+    DEPENDS $<TARGET_OBJECTS:bsd> $<TARGET_OBJECTS:osfmk>
+    COMMAND_EXPAND_LISTS
+    COMMENT "Creating relocatable XNU object for unit tests"
+  )
+  add_custom_target(xnu_test_obj DEPENDS libxnu_test_relocatable.o)
+  add_dependencies(xnu_test_obj bsd osfmk)
+
   add_executable(fake_impls_test fuzz/fakes/fake_impls_test.cc)
   target_compile_options(fake_impls_test PRIVATE -std=c++17 -g)
   target_include_directories(fake_impls_test PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
   target_link_libraries(fake_impls_test
-    ${CMAKE_CURRENT_BINARY_DIR}/libxnu_relocatable.o
+    ${CMAKE_CURRENT_BINARY_DIR}/libxnu_test_relocatable.o
     protobuf-mutator ${Protobuf_LIBRARIES}
     "-Wl,-undefined,dynamic_lookup"
   )
-  add_dependencies(fake_impls_test xnu_obj)
+  # The XNU objects are ASAN and coverage instrumented, so the test needs the
+  # ASAN runtime, which also supplies default coverage callbacks. Not
+  # -fsanitize=fuzzer: that would bring libFuzzer's main along.
+  target_link_options(fake_impls_test PRIVATE -fsanitize=address,fuzzer-no-link)
+  add_dependencies(fake_impls_test xnu_test_obj)
   add_test(NAME fake_impls_test COMMAND fake_impls_test)
+  set_tests_properties(fake_impls_test PROPERTIES
+    ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0:detect_container_overflow=0")
 endif()
 
 # --------------------------------------------------------------------------

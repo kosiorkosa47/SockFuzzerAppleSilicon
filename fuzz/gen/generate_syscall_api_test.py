@@ -100,7 +100,7 @@ int __mac_execve_wrapper(char * fname, char ** argp, char ** envp, struct mac * 
 #endif  // SYSCALL_WRAPPERS_H_
 """
 
-GENERATED_SYSCALL_IMPL = """#include "fuzz/syscall_wrappers.h"
+GENERATED_SYSCALL_IMPL = """#include "fuzz/api/syscall_wrappers.h"
 
 __attribute__((visibility("default"))) int __disable_threadsignal_wrapper(int value, int* retval) {
   struct __disable_threadsignal_args uap = {

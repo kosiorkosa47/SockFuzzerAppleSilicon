@@ -80,6 +80,14 @@ static int tests_failed = 0;
     } \
   } while(0)
 
+#define ASSERT_GT(a, b) do { \
+    if (!((a) > (b))) { \
+      printf("FAIL\n    %s:%d: %s > %s\n", __FILE__, __LINE__, #a, #b); \
+      tests_failed++; \
+      return; \
+    } \
+  } while(0)
+
 // --- copyout tests ---
 
 TEST(copyout_null_kaddr) {
@@ -124,8 +132,9 @@ TEST(copyout_real_pointer) {
 // --- copyin tests ---
 
 TEST(copyin_null_kaddr) {
+  // A NULL kernel buffer is refused with EFAULT rather than ignored.
   int ret = copyin(1, nullptr, 10);
-  ASSERT_EQ(ret, 0);
+  ASSERT_NE(ret, 0);
 }
 
 TEST(copyin_real_pointer) {

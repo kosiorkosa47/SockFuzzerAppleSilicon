@@ -32,10 +32,14 @@ jobs:
           mkdir build && cd build
           cmake .. \
             -DCMAKE_C_COMPILER=$(brew --prefix llvm)/bin/clang \
-            -DCMAKE_CXX_COMPILER=$(brew --prefix llvm)/bin/clang++
+            -DCMAKE_CXX_COMPILER=$(brew --prefix llvm)/bin/clang++ \
+            -DBUILD_TESTS=ON
 
       - name: Build
         run: cmake --build build -j$(sysctl -n hw.ncpu)
+
+      - name: Unit tests
+        run: cd build && ctest --output-on-failure
 
       - name: Smoke test (10 second fuzz run)
         run: |
@@ -82,10 +86,13 @@ jobs:
       - name: Configure
         run: |
           mkdir build && cd build
-          CC=clang CXX=clang++ cmake -GNinja ..
+          CC=clang CXX=clang++ cmake -GNinja -DBUILD_TESTS=ON ..
 
       - name: Build
         run: cmake --build build
+
+      - name: Unit tests
+        run: cd build && ctest --output-on-failure
 
       - name: Smoke test (10 second fuzz run)
         run: |
