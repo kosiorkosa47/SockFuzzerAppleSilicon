@@ -1418,6 +1418,85 @@ void HandleSendmsg(const Command &command, int &retval) {
   sendmsg_wrapper(sm.s(), (caddr_t)&msg, combine_flags(sm.flags()), &retval);
 }
 
+// B7: batched send/receive. Every msghdr_x entry owns its buffers, which
+// must outlive the call, so they are kept in vectors next to the array.
+namespace {
+constexpr int kMaxMsgX = 8;
+constexpr int kMaxMsgXIovs = 4;
+struct UserIov {
+  user64_addr_t iov_base;
+  uint64_t iov_len;
+};
+}  // namespace
+
+void HandleSendmsgX(const SendmsgX &sx) {
+  int cnt = std::min(sx.msgs_size(), kMaxMsgX);
+  std::vector<user64_msghdr_x> hdrs(cnt > 0 ? cnt : 1);
+  std::vector<std::vector<UserIov>> iovs(cnt);
+  std::vector<std::string> names(cnt);
+  for (int i = 0; i < cnt; i++) {
+    const MsgX &mx = sx.msgs(i);
+    user64_msghdr_x &h = hdrs[i];
+    h = {};
+    int niov = std::min(mx.iov_size(), kMaxMsgXIovs);
+    uint64_t datalen = 0;
+    for (int j = 0; j < niov; j++) {
+      iovs[i].push_back({(user64_addr_t)mx.iov(j).data(), mx.iov(j).size()});
+      datalen += mx.iov(j).size();
+    }
+    if (!iovs[i].empty()) h.msg_iov = (user64_addr_t)iovs[i].data();
+    h.msg_iovlen = niov;
+    h.msg_datalen = datalen;
+    if (mx.has_name()) {
+      names[i] = get_sockaddr(mx.name());
+      h.msg_name = (user64_addr_t)names[i].data();
+      h.msg_namelen = names[i].size();
+    }
+    if (mx.has_control() && !mx.control().empty()) {
+      h.msg_control = (user64_addr_t)mx.control().data();
+      h.msg_controllen = mx.control().size();
+    }
+  }
+  user_ssize_t ret = 0;
+  sendmsg_x_wrapper(sx.s(), (struct msghdr_x *)hdrs.data(), (u_int)cnt,
+                    combine_flags(sx.flags()), &ret);
+}
+
+void HandleRecvmsgX(const RecvmsgX &rx) {
+  int cnt = std::min(rx.msgs_size(), kMaxMsgX);
+  std::vector<user64_msghdr_x> hdrs(cnt > 0 ? cnt : 1);
+  std::vector<std::vector<char>> bufs(cnt), names(cnt), controls(cnt);
+  std::vector<UserIov> iovs(cnt > 0 ? cnt : 1);
+  for (int i = 0; i < cnt; i++) {
+    const MsgX &mx = rx.msgs(i);
+    user64_msghdr_x &h = hdrs[i];
+    h = {};
+    uint32_t size = mx.recv_size() % 4096;
+    if (size == 0) size = 128;
+    bufs[i].resize(size);
+    iovs[i] = {(user64_addr_t)bufs[i].data(), size};
+    h.msg_iov = (user64_addr_t)&iovs[i];
+    h.msg_iovlen = 1;
+    uint32_t name_size = mx.name_size() % 256;
+    if (name_size > 0) {
+      names[i].resize(name_size);
+      h.msg_name = (user64_addr_t)names[i].data();
+      h.msg_namelen = name_size;
+    }
+    if (mx.has_control()) {
+      uint32_t control_size = mx.control().size() % 1024;
+      if (control_size > 0) {
+        controls[i].resize(control_size);
+        h.msg_control = (user64_addr_t)controls[i].data();
+        h.msg_controllen = control_size;
+      }
+    }
+  }
+  user_ssize_t ret = 0;
+  recvmsg_x_wrapper(rx.s(), (struct msghdr_x *)hdrs.data(), (u_int)cnt,
+                    combine_flags(rx.flags()), &ret);
+}
+
 // ---------------------------------------------------------------------------
 // Main fuzzer entry point
 // ---------------------------------------------------------------------------
@@ -2090,6 +2169,12 @@ DEFINE_BINARY_PROTO_FUZZER(const Session &session) {
         break;
       case Command::kSendmsg:
         HandleSendmsg(command, retval);
+        break;
+      case Command::kSendmsgX:
+        HandleSendmsgX(command.sendmsg_x());
+        break;
+      case Command::kRecvmsgX:
+        HandleRecvmsgX(command.recvmsg_x());
         break;
       case Command::kPfControl: {
         unsigned long cmd = (command.pf_control().action() == PF_START)

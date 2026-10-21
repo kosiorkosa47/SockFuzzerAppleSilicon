@@ -268,10 +268,10 @@ message Command {
     RecvfromNocancel recvfrom_nocancel = 27;
     Recvmsg recvmsg = 28;
     // RecvmsgNocancel recvmsg_nocancel = 29;
-    // RecvmsgX recvmsg_x = 30;
+    RecvmsgX recvmsg_x = 30;
     Sendmsg sendmsg = 31;
     // SendmsgNocancel sendmsg_nocancel = 32;
-    // SendmsgX sendmsg_x = 33;
+    SendmsgX sendmsg_x = 33;
     Sendto sendto = 34;
     // SendtoNocancel sendto_nocancel = 35;
     // Shutdown shutdown = 36;
@@ -499,12 +499,21 @@ message Recvmsg {
 //   optional RecvmsgNocancelFlags flags = 3;
 // }
 
-// message RecvmsgX {
-//   optional int32 s = 1;
-//   optional StructMsghdrx msgp = 2;
-//   optional uint32 cnt = 3;
-//   optional RecvmsgXFlags flags = 4;
-// }
+// recvmsg_x and sendmsg_x move several datagrams per call through an array
+// of msghdr_x. The harness caps the array at 8 entries and 4 iovs each.
+message MsgX {
+  repeated bytes iov = 1;         // sendmsg_x payload segments
+  optional uint32 recv_size = 2;  // recvmsg_x buffer size, folded into 1..4096
+  optional SockAddr name = 3;
+  optional bytes control = 4;
+  optional uint32 name_size = 5;  // recvmsg_x address buffer, folded into 0..255
+}
+
+message RecvmsgX {
+  required FileDescriptor s = 1;
+  repeated MsgX msgs = 2;
+  repeated MsgFlag flags = 3;
+}
 
 message Sendmsg {
   required FileDescriptor s = 1;
@@ -521,12 +530,11 @@ message Sendmsg {
 //   optional SendmsgNocancelFlags flags = 3;
 // }
 
-// message SendmsgX {
-//   optional int32 s = 1;
-//   optional StructMsghdrx msgp = 2;
-//   optional uint32 cnt = 3;
-//   optional SendmsgXFlags flags = 4;
-// }
+message SendmsgX {
+  required FileDescriptor s = 1;
+  repeated MsgX msgs = 2;
+  repeated MsgFlag flags = 3;
+}
 
 message Sendto {
   optional FileDescriptor s = 1;

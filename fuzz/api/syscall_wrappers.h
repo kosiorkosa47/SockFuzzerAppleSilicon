@@ -60,6 +60,18 @@ struct user64_msghdr {
   socklen_t msg_controllen;  /* ancillary data buffer len */
   int msg_flags;             /* flags on received message */
 };
+// Element of the arrays taken by recvmsg_x and sendmsg_x; same layout as
+// struct user64_msghdr_x in bsd/sys/socket.h.
+struct user64_msghdr_x {
+  user64_addr_t msg_name;    /* optional address */
+  socklen_t msg_namelen;     /* size of address */
+  user64_addr_t msg_iov;     /* scatter/gather array */
+  int msg_iovlen;            /* # elements in msg_iov */
+  user64_addr_t msg_control; /* ancillary data, see below */
+  socklen_t msg_controllen;  /* ancillary data buffer len */
+  int msg_flags;             /* flags on received message */
+  __uint64_t msg_datalen;    /* byte length of buffer in msg_iov */
+};
 #endif
 #include <stddef.h>
 #include <stdint.h>
