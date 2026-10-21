@@ -511,6 +511,16 @@ check_again:
 	so_acquire_accept_list(head, NULL);
 	if (TAILQ_EMPTY(&head->so_comp)) {
 		if (trys >= 10) {
+			/*
+			 * Give up like a non-blocking accept would. Release the
+			 * accept list and the socket lock taken above first:
+			 * jumping straight to out: left the listener's
+			 * so_usecount raised and SOF1_ACCEPT_LIST_HELD set, so
+			 * the listener and its pcb were never freed.
+			 */
+			so_release_accept_list(head);
+			socket_unlock(head, 1);
+			error = EWOULDBLOCK;
 			goto out;
 		}
 		so_release_accept_list(head);
