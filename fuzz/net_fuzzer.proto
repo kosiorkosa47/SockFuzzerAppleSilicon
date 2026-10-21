@@ -520,8 +520,24 @@ message Sendmsg {
   required bytes data = 2;
   repeated MsgFlag flags = 3;
   optional SockAddr to = 4;
-  optional bytes control = 5;  // ancillary data (cmsg): SCM_RIGHTS, IP_PKTINFO, etc.
+  optional bytes control = 5;  // raw ancillary bytes, appended after cmsgs
   repeated bytes extra_iovs = 6;  // additional scatter-gather segments
+  repeated Cmsg cmsgs = 7;        // framed ancillary data, see Cmsg
+}
+
+// One ancillary-data item for sendmsg. The harness writes it as a cmsghdr
+// with the right cmsg_len and Darwin's 4-byte alignment, so the kernel's
+// control-message parsers get past the length checks that raw bytes in
+// Sendmsg.control almost never pass. level and type are the cmsg_level and
+// cmsg_type; the common pairs are SOL_SOCKET/SCM_RIGHTS, IPPROTO_IP/IP_PKTINFO
+// and IPPROTO_IPV6/IPV6_PKTINFO.
+message Cmsg {
+  optional uint32 level = 1;
+  optional uint32 type = 2;
+  optional bytes data = 3;
+  // When non-empty, the payload is these descriptors packed as ints, for
+  // SCM_RIGHTS, and data is ignored.
+  repeated FileDescriptor fds = 4;
 }
 
 // message SendmsgNocancel {

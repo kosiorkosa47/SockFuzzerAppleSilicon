@@ -1380,6 +1380,45 @@ void HandlePipe(std::set<int> &open_fds) {
   }
 }
 
+// B9: frame structured ancillary data. Each Cmsg becomes a cmsghdr with the
+// correct cmsg_len and Darwin's 4-byte alignment, so the kernel's control
+// parsers get past the length checks that raw bytes almost never pass. Any
+// raw Sendmsg.control bytes are appended after the framed messages.
+static std::string BuildControl(const Sendmsg &sm) {
+  // Mirrors <sys/socket.h>: cmsghdr is {len, level, type} then aligned data.
+  struct FuzzCmsghdr {
+    uint32_t cmsg_len;
+    int32_t cmsg_level;
+    int32_t cmsg_type;
+  };
+  const size_t hdr = sizeof(FuzzCmsghdr);
+  auto align4 = [](size_t n) { return (n + 3u) & ~size_t(3); };
+
+  std::string out;
+  for (const Cmsg &c : sm.cmsgs()) {
+    std::string payload;
+    if (c.fds_size() > 0) {
+      // SCM_RIGHTS: the payload is an array of int descriptors.
+      for (int i = 0; i < c.fds_size(); i++) {
+        int32_t fd = c.fds(i);
+        payload.append((const char *)&fd, sizeof(fd));
+      }
+    } else {
+      payload = c.data();
+    }
+    FuzzCmsghdr h;
+    h.cmsg_len = (uint32_t)(hdr + payload.size());  // CMSG_LEN: header not padded
+    h.cmsg_level = (int32_t)c.level();
+    h.cmsg_type = (int32_t)c.type();
+    size_t start = out.size();
+    out.append((const char *)&h, hdr);
+    out.append(payload);
+    out.resize(align4(out.size() - start) + start, '\0');  // pad to CMSG_ALIGN
+  }
+  out += sm.control();  // trailing raw bytes, if any
+  return out;
+}
+
 void HandleSendmsg(const Command &command, int &retval) {
   const Sendmsg &sm = command.sendmsg();
 
@@ -1410,9 +1449,10 @@ void HandleSendmsg(const Command &command, int &retval) {
   msg.msg_iov = (user64_addr_t)iovs;
   msg.msg_iovlen = niov;
 
-  if (sm.has_control() && !sm.control().empty()) {
-    msg.msg_control = (user64_addr_t)sm.control().data();
-    msg.msg_controllen = sm.control().size();
+  std::string control = BuildControl(sm);
+  if (!control.empty()) {
+    msg.msg_control = (user64_addr_t)control.data();
+    msg.msg_controllen = control.size();
   }
 
   sendmsg_wrapper(sm.s(), (caddr_t)&msg, combine_flags(sm.flags()), &retval);
