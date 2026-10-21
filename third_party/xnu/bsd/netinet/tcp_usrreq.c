@@ -1053,6 +1053,32 @@ tcp_usr_send(struct socket *so, int flags, struct mbuf *m,
 		goto out;
 	}
 
+	/*
+	 * Backport of the upstream address-family guard. 20.6.0 derived isipv6
+	 * from nam->sa_family, so a bare AF_INET destination on an AF_INET6
+	 * socket dispatched to the IPv4 tcp_connect, cached an IPv4 route in
+	 * in6p_route, and tcp_output then panicked in in6p_route_copyout ("wrong
+	 * or corrupted route"). Current XNU derives isipv6 from the socket and
+	 * rejects a mismatched family in tcp_usr_connect_common before any
+	 * connect. Do the same here: a destination whose family does not match
+	 * the socket fails with EAFNOSUPPORT (a zero family stays a wildcard).
+	 */
+	if (nam != NULL && nam->sa_family != 0) {
+		boolean_t want6 = (inp->inp_vflag & INP_IPV6) != 0;
+		if ((want6 && nam->sa_family != AF_INET6) ||
+		    (!want6 && nam->sa_family != AF_INET)) {
+			if (m != NULL) {
+				m_freem(m);
+			}
+			if (control != NULL) {
+				m_freem(control);
+				control = NULL;
+			}
+			error = EAFNOSUPPORT;
+			goto out;
+		}
+	}
+
 	calculate_tcp_clock();
 
 	if (net_mpklog_enabled) {
