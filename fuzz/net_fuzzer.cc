@@ -52,6 +52,13 @@ void fake_time_advance(void);
 #define XNU_IPPROTO_TCP   6
 #define XNU_IPPROTO_IP    0
 #define XNU_IPPROTO_IPV6  41
+// IPv6 extension-header protocol numbers. Used to stitch the ext-header chain
+// together so ip6_input's dispatch loop actually reaches the handlers.
+#define XNU_IPPROTO_HOPOPTS  0
+#define XNU_IPPROTO_ROUTING  43
+#define XNU_IPPROTO_FRAGMENT 44
+#define XNU_IPPROTO_NONE     59
+#define XNU_IPPROTO_DSTOPTS  60
 #define XNU_AF_INET       2
 #define XNU_AF_INET6      30
 #define XNU_AF_UNIX       1
@@ -814,25 +821,42 @@ void DoIp4Packet(const Ip4Packet &ip4_packet, const Packet &packet) {
 }
 
 void DoIp6Packet(const Ip6Packet &ip6_packet, const Packet &packet) {
+  // One serialized extension header, plus what is needed to relink its
+  // next-header field after the whole chain is laid out.
+  struct ExtSeg {
+    uint8_t proto;   // this header's own protocol number
+    size_t nxt_off;  // offset of its next-header byte within ext_data
+    bool chainable;  // false for raw bytes (unknown layout)
+  };
   std::string ext_data;
+  std::vector<ExtSeg> segs;
 
-  // Build extension header chain.
+  // Build extension header chain. The next-header byte is the first byte of
+  // each of these structures (ip6r_nxt / ip6f_nxt / ip6e_nxt all sit at +0).
   for (const auto &ext : ip6_packet.ext_headers()) {
+    size_t off = ext_data.size();
     switch (ext.header_case()) {
       case Ip6ExtHeader::kRouting:
         ext_data += get_ip6_route_hdr(ext.routing());
+        segs.push_back({XNU_IPPROTO_ROUTING, off, true});
         break;
       case Ip6ExtHeader::kFragment:
         ext_data += get_ip6_frag_hdr(ext.fragment());
+        segs.push_back({XNU_IPPROTO_FRAGMENT, off, true});
         break;
       case Ip6ExtHeader::kHopByHop:
         ext_data += get_ip6_ext(ext.hop_by_hop());
+        segs.push_back({XNU_IPPROTO_HOPOPTS, off, true});
         break;
       case Ip6ExtHeader::kDestination:
         ext_data += get_ip6_ext(ext.destination());
+        segs.push_back({XNU_IPPROTO_DSTOPTS, off, true});
         break;
       case Ip6ExtHeader::kRaw:
+        // Arbitrary fuzzer bytes with unknown layout: leave this link alone.
+        // This is the escape hatch for emitting deliberately broken chains.
         ext_data += ext.raw();
+        segs.push_back({0, off, false});
         break;
       case Ip6ExtHeader::HEADER_NOT_SET:
         break;
@@ -841,6 +865,30 @@ void DoIp6Packet(const Ip6Packet &ip6_packet, const Packet &packet) {
 
   size_t expected_size = ext_data.size() + ip6_packet.data().size();
   std::string packet_s = get_ip6_hdr(ip6_packet.ip6_hdr(), expected_size);
+
+  // Relink the next-header chain so ip6_input's dispatch loop can walk it and
+  // actually reach frag6_input/dest6_input/route6_input/ip6_hopopts_input.
+  // The fuzzed nxt bytes are otherwise almost never coherent, so the handlers
+  // are effectively unreachable. The base header's fuzzed nxt is treated as
+  // the terminal upper-layer (L4) protocol for the payload. When there are no
+  // extension headers nothing is rewritten, so the fuzzer can still aim the
+  // base header at any protocol directly.
+  if (!segs.empty()) {
+    uint8_t terminal =
+        ip6_packet.data().empty()
+            ? (uint8_t)XNU_IPPROTO_NONE
+            : (uint8_t)ip6_packet.ip6_hdr().ip6_hdrctl().ip6_un1_nxt();
+    // Base IPv6 header points at the first extension header.
+    packet_s[offsetof(struct ip6_hdr, ip6_ctlun.ip6_un1.ip6_un1_nxt)] =
+        (char)segs.front().proto;
+    // Each extension header points at the next; the last at the payload.
+    for (size_t i = 0; i < segs.size(); i++) {
+      if (!segs[i].chainable) continue;
+      uint8_t nxt = (i + 1 < segs.size()) ? segs[i + 1].proto : terminal;
+      ext_data[segs[i].nxt_off] = (char)nxt;
+    }
+  }
+
   packet_s += ext_data;
   packet_s += ip6_packet.data();
 
