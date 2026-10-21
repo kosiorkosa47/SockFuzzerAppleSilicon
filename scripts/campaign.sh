@@ -54,6 +54,12 @@ if [ ! -x "$BIN" ]; then
 fi
 BIN=$(cd "$(dirname "$BIN")" && pwd)/$(basename "$BIN")
 
+# The committed seed set is read alongside the corpus, so a new campaign does
+# not start from nothing. New units are still written to corpus/ only.
+SEED_DIRS=()
+SEEDS="$SCRIPT_DIR/../corpus/seeds"
+[ -d "$SEEDS" ] && SEED_DIRS=("$(cd "$SEEDS" && pwd)")
+
 if [ -z "$JOBS" ]; then
   CPUS=$(sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 2)
   JOBS=$((CPUS > 1 ? CPUS - 1 : 1))
@@ -79,7 +85,7 @@ echo ""
 (
   cd "$WORK" &&
   ASAN_OPTIONS=detect_container_overflow=0:halt_on_error=0:detect_leaks=0 \
-    exec "$BIN" "$WORK/corpus" \
+    exec "$BIN" "$WORK/corpus" ${SEED_DIRS[@]+"${SEED_DIRS[@]}"} \
       -fork="$JOBS" -ignore_crashes=1 -ignore_timeouts=1 -ignore_ooms=1 \
       -artifact_prefix="$WORK/crashes/" -max_len=4096 \
       -timeout="$INPUT_TIMEOUT" \

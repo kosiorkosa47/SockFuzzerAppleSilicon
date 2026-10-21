@@ -20,8 +20,9 @@ requirements-lock.txt
 /external
 /compile_commands.json
 
-# Fuzzer runtime data
-corpus/
+# Fuzzer runtime data. corpus/seeds/ is the committed seed set.
+corpus/*
+!corpus/seeds/
 crashes/
 *.log
 
