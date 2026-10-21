@@ -670,6 +670,12 @@ endif()
 # --------------------------------------------------------------------------
 # Protobuf — find system-installed protobuf v34
 # --------------------------------------------------------------------------
+# OSS-Fuzz runs fuzzers in a runner image without the build image's packages,
+# so a fuzzer linked against libprotobuf.so fails to start there. Link the
+# static library in that mode.
+if(DEFINED ENV{SANITIZER})
+  set(Protobuf_USE_STATIC_LIBS ON)
+endif()
 find_package(Protobuf REQUIRED)
 # Protobuf and generated header directories are scoped to targets that need
 # them (protobuf-mutator, net_fuzzer) rather than polluting all targets.
