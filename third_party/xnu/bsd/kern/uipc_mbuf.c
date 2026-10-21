@@ -5480,7 +5480,11 @@ int MPFail;
 struct mbuf *
 m_pullup(struct mbuf *n, int len)
 {
-	return n;
+	// The early return made m_pullup a no-op, so a header split across a
+	// chained mbuf never became contiguous. ip_input then left tcp_input to
+	// read ip_hl past the first segment, and ip_stripoptions did a bcopy with
+	// a length that went negative: a harness artifact, not an XNU bug. m_get,
+	// MTOD and the rest below are real XNU code, so run the real pullup.
 	struct mbuf *m;
 	int count;
 	int space;
