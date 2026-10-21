@@ -3221,6 +3221,21 @@ void tcp_fuzzer_reset() {
 }
 
 /*
+ * Time-wait pcbs are reaped once tcp_now passes their 2MSL deadline, but
+ * tcp_fuzzer_reset winds tcp_now back to 0 every iteration, so that deadline
+ * was never reached and closed connections piled up across iterations. The
+ * next input then started with stale pcbs on the lists. Jump an hour past
+ * every deadline and collect twice: the first pass closes expired time-wait
+ * pcbs, the second disposes of the pcbs that leaves dead. Call this before
+ * tcp_fuzzer_reset.
+ */
+void tcp_fuzzer_reap(void) {
+	tcp_now += TCP_RETRANSHZ * 3600;
+	tcp_gc(&tcbinfo);
+	tcp_gc(&tcbinfo);
+}
+
+/*
  * Checks TCP Segment Offloading capability for a given connection
  * and interface pair.
  */

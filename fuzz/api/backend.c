@@ -48,6 +48,7 @@ void in6_tmpaddrtimer(void);
 void mp_timeout(void);
 void igmp_timeout(void);
 void tcp_fuzzer_reset(void);
+void tcp_fuzzer_reap(void);
 void in6_rtqtimo(void*);
 void frag6_timeout();
 void mld_timeout();
@@ -480,6 +481,9 @@ __attribute__((visibility("default"))) void clear_all() {
   in6_tmpaddrtimer();
   mp_timeout();
   igmp_timeout();
+  // Reap time-wait and dead TCP pcbs before the clock is wound back, or
+  // their 2MSL deadline is never reached and they carry into the next input.
+  tcp_fuzzer_reap();
   tcp_fuzzer_reset();
   frag6_timeout();
   mld_timeout();
