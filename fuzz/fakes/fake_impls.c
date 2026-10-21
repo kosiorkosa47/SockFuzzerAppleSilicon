@@ -613,7 +613,16 @@ void mach_port_deallocate() {}
 int mac_file_label_init() { return 0; }
 void vn_pathconf() {}
 void audit_arg_mode() {}
-void mac_socket_check_receive() {}
+// XNU declares this __result_use_check returning int, like
+// mac_socket_check_send below. As a void stub it left kauth_cred_get() in the
+// return register on arm64, so every datagram receive (recvfrom/recvmsg on
+// UDP, raw, ICMP, ...) saw a non-zero "denied" and failed with EPERM before
+// soreceive, leaving the whole datagram receive path uncovered.
+int mac_socket_check_receive(kauth_cred_t cred, struct socket *so) {
+  (void)cred;
+  (void)so;
+  return 0;
+}
 int mac_socket_check_send(kauth_cred_t cred, struct socket *so,
                           struct sockaddr *addr) {
   return 0;
