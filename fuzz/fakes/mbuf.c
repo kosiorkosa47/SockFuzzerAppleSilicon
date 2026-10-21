@@ -35,6 +35,10 @@ void* calloc(size_t nmemb, size_t size);
 void free(void* ptr);
 int posix_memalign(void** memptr, size_t alignment, size_t size);
 
+// Private to uipc_mbuf.c. Every mbuf+cluster pair handed out here must carry
+// it, or MBUF_IS_COMPOSITE() VERIFYs fail when XNU takes it back.
+#define EXTF_COMPOSITE 0x1
+
 typedef struct {
   size_t bufsize;
   // Must we always return clusters?
@@ -113,7 +117,6 @@ struct mbuf* mbuf_create(const uint8_t* data, size_t size, bool is_header,
 
     rfa->refcnt = 1;
     rfa->minref = 1;
-    int EXTF_COMPOSITE = 0x1;
     rfa->flags = EXTF_COMPOSITE;
     m->m_ext.ext_refflags = (struct ext_ref*)rfa;
   } else {
@@ -213,6 +216,7 @@ int mcache_alloc_ext(mcache_t* cp, void** list, unsigned int num, int wait) {
     }
     rfa->refcnt = 1;
     rfa->minref = 1;
+    rfa->flags = EXTF_COMPOSITE;
     m->m_ext.ext_refflags = rfa;
     head = m;
     allocated++;
