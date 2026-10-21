@@ -631,7 +631,8 @@ extern const unsigned long diocchangerule_val;
 extern const unsigned long diockillstates_val;
 
 extern int kevent_wrapper(int kq, void* changelist, int nchanges,
-                          void* eventlist, int nevents, int* retval);
+                          void* eventlist, int nevents, unsigned int flags,
+                          int* retval);
 
 // Enable this when copyout should work.
 extern bool real_copyout;
@@ -2208,8 +2209,10 @@ DEFINE_BINARY_PROTO_FUZZER(const Session &session) {
           uint64_t udata;
           uint64_t ext[2];
         } eventlist[8] = {};
+        // KEVENT_FLAG_ERROR_EVENTS: only report changes that failed.
+        unsigned int kev_flags = kev.error_events() ? 0x002 : 0;
         kevent_wrapper(kev.kq(), changelist, nchanges,
-                       eventlist, nevents, &retval);
+                       eventlist, nevents, kev_flags, &retval);
         break;
       }
       case Command::COMMAND_NOT_SET:

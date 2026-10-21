@@ -353,6 +353,9 @@ message Kevent {
   required FileDescriptor kq = 1;
   repeated KevChange changes = 2;
   optional uint32 nevents = 3;
+  // The harness always adds KEVENT_FLAG_IMMEDIATE, since a blocking kevent
+  // cannot return in a single-threaded harness.
+  optional bool error_events = 4;
 }
 
 // --- TCP state machine aware grammar (F1) ---

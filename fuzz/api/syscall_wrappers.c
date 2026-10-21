@@ -426,16 +426,23 @@ __attribute__((visibility("default"))) int kqueue_wrapper(int* retval) {
   return kqueue(kernproc, &uap, retval);
 }
 
+#ifndef KEVENT_FLAG_IMMEDIATE
+#define KEVENT_FLAG_IMMEDIATE 0x000001
+#endif
+
 __attribute__((visibility("default"))) int kevent_wrapper(
     int kq, void* changelist, int nchanges,
-    void* eventlist, int nevents, int* retval) {
+    void* eventlist, int nevents, unsigned int flags, int* retval) {
+  // Always poll. A NULL timeout means wait forever, and in a single-threaded
+  // harness thread_block() returns where the kernel would never come back,
+  // so kqueue_scan ran into __builtin_unreachable().
   struct kevent64_args uap = {
       .fd = kq,
       .changelist = (user_addr_t)changelist,
       .nchanges = nchanges,
       .eventlist = (user_addr_t)eventlist,
       .nevents = nevents,
-      .flags = 0,
+      .flags = flags | KEVENT_FLAG_IMMEDIATE,
       .timeout = 0,
   };
   return kevent64(kernproc, &uap, retval);
