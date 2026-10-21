@@ -38,6 +38,7 @@
 #include "BUILD/obj/EXPORT_HDRS/osfmk/kern/zalloc.h"
 
 int printf(const char*, ...) __printflike(1, 2);
+int dprintf(int fd, const char*, ...) __printflike(2, 3);
 int vdprintf(int fd, const char*, va_list);
 void abort(void) __attribute__((noreturn));
 
@@ -174,6 +175,107 @@ static void zt_quarantine_push(void *ptr, uint32_t size) {
 	__asan_poison_memory_region(ptr, size);
 }
 
+// ----------------------------------------------------------------------------
+// Leak report: which zones carry objects from one iteration into the next.
+//
+// At reset time zt_table holds exactly the allocations made during the
+// iteration that just ended. Those still live survived teardown, so the next
+// input starts from different state, and a crash can depend on inputs run
+// before it. With SOCKFUZZER_LEAK_REPORT=1 they are tallied per zone and the
+// zones that leak most are printed every ZT_REPORT_EVERY iterations and at
+// exit. Off by default, so normal runs pay nothing.
+// ----------------------------------------------------------------------------
+
+char *getenv(const char *name);
+int atexit(void (*fn)(void));
+
+#define ZT_REPORT_ZONES 512
+#define ZT_REPORT_EVERY 1000
+
+struct zt_leak_stat {
+	const char *name;       // zone name; NULL slot = unused
+	uint64_t    survivors;  // objects that outlived their iteration
+	uint64_t    iters;      // iterations in which this zone leaked
+	uint64_t    bytes;      // bytes those objects hold
+};
+
+static struct zt_leak_stat zt_leaks[ZT_REPORT_ZONES];
+static int                 zt_leak_mode = -1;  // -1 = not yet read
+static uint64_t            zt_iterations = 0;
+
+static struct zt_leak_stat *zt_leak_slot(const char *name) {
+	for (int i = 0; i < ZT_REPORT_ZONES; i++) {
+		if (zt_leaks[i].name == name) return &zt_leaks[i];
+		if (zt_leaks[i].name == NULL) {
+			zt_leaks[i].name = name;
+			return &zt_leaks[i];
+		}
+	}
+	return NULL;  // more distinct zones than slots; drop the rest
+}
+
+static void zt_leak_print(void) {
+	uint64_t total = 0;
+	for (int i = 0; i < ZT_REPORT_ZONES && zt_leaks[i].name; i++) {
+		total += zt_leaks[i].survivors;
+	}
+	dprintf(2, "[leak-report] %llu iterations, %llu objects outlived "
+	    "their iteration. Top zones:\n",
+	    (unsigned long long)zt_iterations, (unsigned long long)total);
+	dprintf(2, "[leak-report] %10s %8s %10s  %s\n",
+	    "objects", "iters", "bytes", "zone");
+	// Selection of the 25 largest, without disturbing the table.
+	bool shown[ZT_REPORT_ZONES] = {0};
+	for (int rank = 0; rank < 25; rank++) {
+		int best = -1;
+		for (int i = 0; i < ZT_REPORT_ZONES && zt_leaks[i].name; i++) {
+			if (shown[i]) continue;
+			if (best < 0 || zt_leaks[i].survivors > zt_leaks[best].survivors) {
+				best = i;
+			}
+		}
+		if (best < 0 || zt_leaks[best].survivors == 0) break;
+		shown[best] = true;
+		dprintf(2, "[leak-report] %10llu %8llu %10llu  %s\n",
+		    (unsigned long long)zt_leaks[best].survivors,
+		    (unsigned long long)zt_leaks[best].iters,
+		    (unsigned long long)zt_leaks[best].bytes,
+		    zt_leaks[best].name);
+	}
+}
+
+static void zt_leak_tally(void) {
+	if (zt_leak_mode < 0) {
+		const char *env = getenv("SOCKFUZZER_LEAK_REPORT");
+		zt_leak_mode = (env && env[0] == '1');
+		if (zt_leak_mode) atexit(zt_leak_print);
+	}
+	if (!zt_leak_mode) return;
+
+	zt_iterations++;
+	// One iteration can leak many objects of a zone; count the iteration once.
+	struct zt_leak_stat *touched[ZT_REPORT_ZONES];
+	int ntouched = 0;
+	for (uint32_t s = 0; s < ZT_HASH_SIZE; s++) {
+		struct zt_entry *e = &zt_table[s];
+		if (e->ptr == NULL || e->freed) continue;
+		const char *name = (e->zone && e->zone->z_name) ?
+		    e->zone->z_name : "<kalloc>";
+		struct zt_leak_stat *st = zt_leak_slot(name);
+		if (st == NULL) continue;
+		st->survivors++;
+		st->bytes += e->size;
+		bool seen = false;
+		for (int k = 0; k < ntouched; k++) {
+			if (touched[k] == st) { seen = true; break; }
+		}
+		if (!seen && ntouched < ZT_REPORT_ZONES) touched[ntouched++] = st;
+	}
+	for (int k = 0; k < ntouched; k++) touched[k]->iters++;
+
+	if (zt_iterations % ZT_REPORT_EVERY == 0) zt_leak_print();
+}
+
 // Reset zone tracking between fuzzer iterations.
 // Drains quarantine and frees leaked allocations to prevent OOM.
 // Live allocations that were never zfree'd are freed here — these are
@@ -206,6 +308,9 @@ void zone_tracking_reset(void) {
 	//
 	// To actually fix these leaks, each XNU subsystem needs a proper
 	// teardown function — that's a separate project.
+
+	// Tally what outlived the iteration before the table is wiped.
+	zt_leak_tally();
 
 	// Clear tracking table
 	memset(zt_table, 0, sizeof(zt_table));
