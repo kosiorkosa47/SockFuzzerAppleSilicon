@@ -44,6 +44,7 @@
 #include <stdarg.h>
 #include <stdint.h>
 #include <string.h>
+#include <sys/errno.h>
 
 #include "bsd/sys/kernel_types.h"
 
@@ -280,11 +281,21 @@ void memorystatus_filtops() {}
 
 void memorystatus_kevent_init() {}
 
+// Real prototype: int msleep(void *chan, lck_mtx_t *mtx, int pri,
+//   const char *wmesg, struct timespec *ts). The harness never wakes a
+//   blocking sleep, so report how a returning wait would: a timed wait (ts
+//   given) timed out (EWOULDBLOCK); an untimed wait was interrupted (EINTR).
+//   Either is non-zero, so loops that spin until woken now stop.
 int msleep(void *chan, void *mtx, int pri, const char *wmesg, void *ts) {
-  return 0;  // Simulate immediate wakeup
+  return ts ? EWOULDBLOCK : EINTR;
 }
 
-int msleep0() { return 0; }
+// Real prototype: int msleep0(void *chan, lck_mtx_t *mtx, int pri,
+//   const char *wmesg, int timo, int (*continuation)(int)).
+int msleep0(void *chan, void *mtx, int pri, const char *wmesg, int timo,
+            void *continuation) {
+  return timo ? EWOULDBLOCK : EINTR;
+}
 
 int msleep1() { return 0; }
 
@@ -462,9 +473,19 @@ int tick = 10000;
 
 void timespec_is_valid() {}
 
-int tsleep() { return 0; }
+// Real prototype: int tsleep(void *chan, int pri, const char *wmesg, int timo).
+// A timed wait (timo given) times out (EWOULDBLOCK); an untimed one is
+// interrupted (EINTR). See msleep() above.
+int tsleep(void *chan, int pri, const char *wmesg, int timo) {
+  return timo ? EWOULDBLOCK : EINTR;
+}
 
-int tsleep0() { return 0; }
+// Real prototype: int tsleep0(void *chan, int pri, const char *wmesg, int timo,
+//   int (*continuation)(int)).
+int tsleep0(void *chan, int pri, const char *wmesg, int timo,
+            void *continuation) {
+  return timo ? EWOULDBLOCK : EINTR;
+}
 
 int tsleep1() { return 0; }
 

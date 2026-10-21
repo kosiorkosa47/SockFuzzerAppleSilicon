@@ -579,6 +579,13 @@ sbwait(struct sockbuf *sb)
 	// error = msleep((caddr_t)&sb->sb_cc, mutex_held,
 	//     nointr ? PSOCK : PSOCK | PCATCH,
 	//     nointr ? "sbwait_nointr" : "sbwait", &ts);
+	//
+	// The single-threaded harness has no other thread to drain the socket
+	// buffer, so the real blocking msleep() here would never be woken. Return
+	// as a timed-out wait would (sb_timeo expired): EWOULDBLOCK. This mirrors a
+	// socket whose SO_SNDTIMEO fired and stops callers such as sosendcheck()
+	// from spinning forever on a full send buffer.
+	error = EWOULDBLOCK;
 
 	VERIFY(sb->sb_waiters != 0);
 	sb->sb_waiters--;
