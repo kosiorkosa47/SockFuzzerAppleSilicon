@@ -1,7 +1,7 @@
-homepage: "https://github.com/kosiorkosa47/SockFuzzerAppleSillicon"
+homepage: "https://github.com/kosiorkosa47/SockFuzzerAppleSilicon"
 language: c++
 primary_contact: "kosiorkosa47@users.noreply.github.com"
-main_repo: "https://github.com/kosiorkosa47/SockFuzzerAppleSillicon.git"
+main_repo: "https://github.com/kosiorkosa47/SockFuzzerAppleSilicon.git"
 sanitizers:
   - address
   - undefined
@@ -9,3 +9,4 @@ architectures:
   - x86_64
 fuzzing_engines:
   - libfuzzer
+base_os_version: ubuntu-24-04

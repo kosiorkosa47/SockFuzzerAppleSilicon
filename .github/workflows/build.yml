@@ -179,3 +179,40 @@ jobs:
           name: coverage-report
           path: build/coverage_report/
           if-no-files-found: ignore
+
+  # Builds the fuzzer exactly as OSS-Fuzz would, from ossfuzz/, so the
+  # integration keeps building as the code changes. Runs natively on x86_64,
+  # which OSS-Fuzz requires and Apple Silicon can only emulate slowly.
+  build-ossfuzz:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Build OSS-Fuzz image
+        run: docker build -t sockfuzzer-ossfuzz -f ossfuzz/Dockerfile .
+
+      - name: Compile (address sanitizer, libFuzzer)
+        run: |
+          mkdir -p out
+          docker run --rm \
+            -e SANITIZER=address -e FUZZING_ENGINE=libfuzzer \
+            -e ARCHITECTURE=x86_64 -e FUZZING_LANGUAGE=c++ \
+            -v "$PWD/out":/out sockfuzzer-ossfuzz compile
+          ls -la out
+
+      - name: Smoke test the OSS-Fuzz build
+        run: |
+          test -x out/net_fuzzer
+          mkdir -p seeds && unzip -q out/net_fuzzer_seed_corpus.zip -d seeds
+          set +e
+          ASAN_OPTIONS=detect_container_overflow=0:halt_on_error=0:detect_leaks=0 \
+            out/net_fuzzer seeds/ -max_total_time=20 -timeout=10
+          CODE=$?
+          set -e
+          # 0 clean, 1/77/134 a finding, 124 timeout: all mean the binary ran.
+          case $CODE in
+            0|1|77|124|134) echo "OSS-Fuzz build runs (exit $CODE)" ;;
+            *) echo "FAIL: unexpected exit $CODE"; exit 1 ;;
+          esac

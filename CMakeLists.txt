@@ -548,19 +548,22 @@ set(XNU_INCLUDES
 # Sanitizer / fuzzer flags
 # --------------------------------------------------------------------------
 if(DEFINED ENV{SANITIZER})
+  # OSS-Fuzz passes CFLAGS as one space-separated string. Split it, or the
+  # whole thing reaches the compiler as a single argument.
+  separate_arguments(OSSFUZZ_CFLAGS UNIX_COMMAND "$ENV{CFLAGS}")
   if($ENV{SANITIZER} MATCHES "address")
     set(FUZZER_SOURCES fuzz/fakes/san.c
                        third_party/xnu/san/kasan-memintrinsics.c
     )
     set(FUZZER_DEFINES -DKASAN=1)
-    set(FUZZER_CXX_FLAGS $ENV{CFLAGS})
-    set(FUZZER_LD_FLAGS $ENV{CFLAGS})
+    set(FUZZER_CXX_FLAGS ${OSSFUZZ_CFLAGS})
+    set(FUZZER_LD_FLAGS ${OSSFUZZ_CFLAGS})
   else()
     # Other sanitizers (undefined, memory) — use provided flags without KASAN
     set(FUZZER_SOURCES "")
     set(FUZZER_DEFINES "")
-    set(FUZZER_CXX_FLAGS $ENV{CFLAGS})
-    set(FUZZER_LD_FLAGS $ENV{CFLAGS})
+    set(FUZZER_CXX_FLAGS ${OSSFUZZ_CFLAGS})
+    set(FUZZER_LD_FLAGS ${OSSFUZZ_CFLAGS})
   endif()
 else()
   set(FUZZER_CXX_FLAGS -fsanitize=address,fuzzer-no-link -mllvm -asan-globals=0)
