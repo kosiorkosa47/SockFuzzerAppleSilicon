@@ -6,12 +6,15 @@
 # fork mode with -ignore_crashes, and new crash files are grouped by signature
 # with triage.sh while the campaign is going.
 #
-# Usage: ./scripts/campaign.sh [-b binary] [-j jobs] [-t seconds] [-i seconds] <workdir> [-- libFuzzer flags]
+# Usage: ./scripts/campaign.sh [-b binary] [-j jobs] [-t seconds] [-i seconds] [-T seconds] <workdir> [-- libFuzzer flags]
 #
 #   -b binary   fuzzer to run (default build/net_fuzzer)
 #   -j jobs     parallel fork jobs (default: CPUs - 1)
 #   -t seconds  stop after this long (default: run until interrupted)
 #   -i seconds  triage interval (default 300)
+#   -T seconds  per-input timeout (default 10). An input runs in
+#               milliseconds; libFuzzer's own default of 1200 let one hung
+#               input stall a fork job for twenty minutes.
 #
 # Layout of <workdir>, which can be reused to continue a campaign:
 #   corpus/      the growing corpus
@@ -29,17 +32,19 @@ BIN="build/net_fuzzer"
 JOBS=""
 TOTAL_TIME=0
 INTERVAL=300
-while getopts "b:j:t:i:" opt; do
+INPUT_TIMEOUT=10
+while getopts "b:j:t:i:T:" opt; do
   case $opt in
     b) BIN=$OPTARG ;;
     j) JOBS=$OPTARG ;;
     t) TOTAL_TIME=$OPTARG ;;
     i) INTERVAL=$OPTARG ;;
-    *) sed -n '9,15p' "$0"; exit 2 ;;
+    T) INPUT_TIMEOUT=$OPTARG ;;
+    *) sed -n '9,18p' "$0"; exit 2 ;;
   esac
 done
 shift $((OPTIND - 1))
-WORK="${1:?Usage: $0 [-b binary] [-j jobs] [-t seconds] [-i seconds] <workdir> [-- libFuzzer flags]}"
+WORK="${1:?Usage: $0 [-b binary] [-j jobs] [-t seconds] [-i seconds] [-T seconds] <workdir> [-- libFuzzer flags]}"
 shift
 [ "${1:-}" = "--" ] && shift
 
@@ -77,6 +82,7 @@ echo ""
     exec "$BIN" "$WORK/corpus" \
       -fork="$JOBS" -ignore_crashes=1 -ignore_timeouts=1 -ignore_ooms=1 \
       -artifact_prefix="$WORK/crashes/" -max_len=4096 \
+      -timeout="$INPUT_TIMEOUT" \
       $TIME_FLAG "$@"
 ) >> "$LOG" 2>&1 &
 FUZZER_PID=$!
