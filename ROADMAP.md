@@ -261,7 +261,7 @@ were not, so their status is unknown rather than open.
 | Item | Status |
 |---|---|
 | C3 PF state cleanup | Done. `clear_all()` calls `pf_flush_all()`, which drops states and rules and stops PF. The previous call went through a socket ioctl on descriptor 0 and never reached PF |
-| C4 Routing table flush | Partial. Route timers expire stale entries; a full flush would need `rtable_flush()`, which is not stubbed. The limitation is recorded in `clear_all()` |
+| C4 Routing table flush | Done for cloned routes. `clear_all()` calls `in_rtqdrain()` and `in6_rtqdrain()`, which delete every `RTPRF_OURS` route regardless of expiry; the rtqtimo timers never reached the one-hour expiry under the fake clock. Administratively added routes are not flushed |
 | C5 Interface address cleanup | Open. Addresses added via `SIOCAIFADDR_IN6_64` still persist across iterations. Recorded in `clear_all()` |
 
 Iteration teardown itself was rewritten: `TearDownIteration` now sweeps the whole

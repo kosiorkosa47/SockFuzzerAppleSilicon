@@ -70,6 +70,8 @@ void tcp_cc_init(void);
 void net_init_run(void);
 errno_t necp_init(void);
 void in_rtqtimo(void* targ);
+void in_rtqdrain(void);
+void in6_rtqdrain(void);
 void* nstat_idle_check(void* p0, void* p1);
 
 extern int dlil_verbose;
@@ -488,12 +490,12 @@ __attribute__((visibility("default"))) void clear_all() {
   frag6_timeout();
   mld_timeout();
 
-  // Route timer cleanup — drains expired routes (C4).
-  // Note: full route table flush would require rtable_flush() which is
-  // not currently stubbed. These timers expire old entries which provides
-  // partial cleanup.
-  in6_rtqtimo(NULL);
-  in_rtqtimo(NULL);
+  // Drop cloned host routes (C4). The rtqtimo timers delete them only once
+  // rt_expire passes, an hour out, which the fake clock never reaches. The
+  // drain variants delete every RTPRF_OURS route regardless of expiry; a
+  // route a pcb still references is not RTPRF_OURS and is left alone.
+  in6_rtqdrain();
+  in_rtqdrain();
 
   nstat_idle_check(NULL, NULL);
   domain_timeout(NULL);
