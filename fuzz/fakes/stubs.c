@@ -61,6 +61,8 @@ struct vnode_attr;
 
 int printf(const char* format, ...);
 int vprintf(const char* format, va_list ap);
+int dprintf(int fd, const char* format, ...);
+void abort(void) __attribute__((noreturn));
 void free(void *ptr);
 extern void get_fuzzed_bytes(void* addr, size_t bytes);
 
@@ -72,8 +74,11 @@ extern void get_fuzzed_bytes(void* addr, size_t bytes);
 
 __attribute__((visibility("default")))
 void Assert(const char* file, int line, const char* expression) {
-  printf("ASSERT: %s:%d: %s\n", file, line, expression);
-  _exit(77);  // Clean exit — libFuzzer logs the crash input without SIGABRT noise
+  // stderr is unbuffered, and abort() lets libFuzzer's SIGABRT handler save
+  // the input and print a stack. _exit() did neither: the message was lost in
+  // the stdout buffer and no crash file was written.
+  dprintf(2, "ASSERT: %s:%d: %s\n", file, line, expression);
+  abort();
 }
 
 int IOBSDGetPlatformUUID() { return 0; }
