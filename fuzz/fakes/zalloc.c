@@ -27,6 +27,7 @@
  */
 
 #include <kern/assert.h>
+#include <stdarg.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
@@ -37,6 +38,21 @@
 #include "BUILD/obj/EXPORT_HDRS/osfmk/kern/zalloc.h"
 
 int printf(const char*, ...) __printflike(1, 2);
+int vdprintf(int fd, const char*, va_list);
+void abort(void) __attribute__((noreturn));
+
+// A detected zone bug ends the run where it happened. Printing and carrying
+// on left nothing for libFuzzer to save, and a second quarantine push of the
+// same pointer made ASAN report it later from the eviction path instead.
+static void zt_fatal(const char *fmt, ...) __printflike(1, 2)
+    __attribute__((noreturn));
+static void zt_fatal(const char *fmt, ...) {
+  va_list ap;
+  va_start(ap, fmt);
+  vdprintf(2, fmt, ap);
+  va_end(ap);
+  abort();
+}
 
 // We link these in from libc/asan
 void* malloc(size_t size);
@@ -271,27 +287,23 @@ extern void zfree(
   // Double-free detection
   if (e->freed) {
     zt_double_free_count++;
-    printf("ZONE BUG: double-free of %p (zone=%s, size=%u)\n",
-           elem,
-           (e->zone && e->zone->z_name) ? e->zone->z_name : "<unknown>",
-           e->size);
-    // Let ASAN catch this — freeing poisoned memory will trigger report
-    free(elem);
-    return;
+    zt_fatal("ZONE BUG: double-free of %p (zone=%s, size=%u)\n",
+             elem,
+             (e->zone && e->zone->z_name) ? e->zone->z_name : "<unknown>",
+             e->size);
   }
 
   // Zone confusion detection: freeing to wrong zone
   struct zone *free_zone = zone_or_view.zov_zone;
   if (e->zone != NULL && free_zone != NULL && e->zone != free_zone) {
     zt_zone_confusion_count++;
-    printf("ZONE BUG: zone confusion! %p allocated from '%s' (elem_size=%u) "
-           "but freed to '%s' (elem_size=%u)\n",
-           elem,
-           e->zone->z_name ? e->zone->z_name : "<?>",
-           e->zone->z_elem_size,
-           free_zone->z_name ? free_zone->z_name : "<?>",
-           free_zone->z_elem_size);
-    // Still free it but this is a REAL BUG in XNU if it happens
+    zt_fatal("ZONE BUG: zone confusion! %p allocated from '%s' (elem_size=%u) "
+             "but freed to '%s' (elem_size=%u)\n",
+             elem,
+             e->zone->z_name ? e->zone->z_name : "<?>",
+             e->zone->z_elem_size,
+             free_zone->z_name ? free_zone->z_name : "<?>",
+             free_zone->z_elem_size);
   }
 
   // Mark freed and quarantine
@@ -375,7 +387,7 @@ void _FREE_ZONE(void* elem, size_t size, int type) {
   if (e) {
     if (e->freed) {
       zt_double_free_count++;
-      printf("ZONE BUG: double-free of %p (MALLOC, size=%u)\n", elem, e->size);
+      zt_fatal("ZONE BUG: double-free of %p (MALLOC, size=%u)\n", elem, e->size);
     }
     e->freed = 1;
     zt_free_count++;
@@ -392,7 +404,7 @@ void kfree(void* data, size_t size) {
   if (e) {
     if (e->freed) {
       zt_double_free_count++;
-      printf("ZONE BUG: double-free of %p (kfree, size=%u)\n", data, e->size);
+      zt_fatal("ZONE BUG: double-free of %p (kfree, size=%u)\n", data, e->size);
     }
     e->freed = 1;
     zt_free_count++;
@@ -422,7 +434,7 @@ void OSFree(void* ptr, uint32_t size, void* tag) {
   if (e) {
     if (e->freed) {
       zt_double_free_count++;
-      printf("ZONE BUG: double-free of %p (OSFree)\n", ptr);
+      zt_fatal("ZONE BUG: double-free of %p (OSFree)\n", ptr);
     }
     e->freed = 1;
     zt_free_count++;
@@ -477,7 +489,7 @@ kheap_free(
   if (e) {
     if (e->freed) {
       zt_double_free_count++;
-      printf("ZONE BUG: double-free of %p (kheap_free)\n", data);
+      zt_fatal("ZONE BUG: double-free of %p (kheap_free)\n", data);
     }
     e->freed = 1;
     zt_free_count++;
@@ -525,7 +537,7 @@ void kheap_free_addr(
   if (e) {
     if (e->freed) {
       zt_double_free_count++;
-      printf("ZONE BUG: double-free of %p (kheap_free_addr)\n", addr);
+      zt_fatal("ZONE BUG: double-free of %p (kheap_free_addr)\n", addr);
     }
     e->freed = 1;
     zt_free_count++;

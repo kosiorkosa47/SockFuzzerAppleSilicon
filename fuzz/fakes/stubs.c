@@ -62,6 +62,7 @@ struct vnode_attr;
 int printf(const char* format, ...);
 int vprintf(const char* format, va_list ap);
 int dprintf(int fd, const char* format, ...);
+int vdprintf(int fd, const char* format, va_list ap);
 void abort(void) __attribute__((noreturn));
 void free(void *ptr);
 extern void get_fuzzed_bytes(void* addr, size_t bytes);
@@ -626,12 +627,13 @@ int aes_encrypt_key_with_iv_gcm() { return 0; }
 int aes_encrypt_reset_gcm() { return 0; }
 
 void panic(const char *fmt, ...) {
-  printf("KERNEL PANIC: ");
+  // stderr, for the same reason as Assert(): the trap does not flush stdout.
+  dprintf(2, "KERNEL PANIC: ");
   va_list ap;
   va_start(ap, fmt);
-  vprintf(fmt, ap);
+  vdprintf(2, fmt, ap);
   va_end(ap);
-  printf("\n");
+  dprintf(2, "\n");
   __builtin_trap();
 }
 
