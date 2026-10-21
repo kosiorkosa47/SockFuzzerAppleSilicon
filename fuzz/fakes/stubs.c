@@ -172,8 +172,6 @@ int fuulong() { return 0; }
 
 void gPEClockFrequencyInfo() {}
 
-void* g_crypto_funcs = NULL;
-
 void* get_bsdtask_info() { extern char fake_uthread[]; return fake_uthread; }
 void* get_bsdthreadtask_info() { extern char fake_uthread[]; return fake_uthread; }
 

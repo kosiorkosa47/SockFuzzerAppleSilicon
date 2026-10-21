@@ -509,6 +509,7 @@ set(BSD_SOURCES
     fuzz/api/ioctl.c
     fuzz/api/backend.c
     fuzz/fakes/stubs.c
+    fuzz/fakes/crypto_funcs.c
     fuzz/fakes/thread.c
     fuzz/fakes/fake_impls.c
     fuzz/fakes/timer.c
