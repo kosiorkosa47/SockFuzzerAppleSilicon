@@ -73,6 +73,7 @@ void in_rtqtimo(void* targ);
 void in_rtqdrain(void);
 void in6_rtqdrain(void);
 boolean_t so_cache_timer(void);
+void unp_gc(void);
 void* nstat_idle_check(void* p0, void* p1);
 
 extern int dlil_verbose;
@@ -471,6 +472,12 @@ extern char fake_thread[];
 extern char fake_uthread[];
 
 __attribute__((visibility("default"))) void clear_all() {
+  // Collect descriptors caught in SCM_RIGHTS cycles. A descriptor sent over a
+  // unix socket that is itself only reachable from a message in flight keeps
+  // a reference after fds 0..9 are closed, and unp_gc otherwise runs only
+  // when some other unix socket happens to be freed.
+  unp_gc();
+
   // Deliver or free whatever the stack left queued on the loopback input
   // queue. Nothing else ever empties it, so without this the mbufs leak.
   drain_loopback_input();

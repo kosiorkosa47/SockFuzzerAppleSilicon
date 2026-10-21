@@ -255,11 +255,13 @@ code on 2026-09-28, B7 to B10 on 2026-10-21.
 
 ## C. State Management & Isolation
 
-**Partially audited on 2026-09-28.** Only the items below were checked; C1 and C2
-were not, so their status is unknown rather than open.
+**Audited 2026-09-28 (C3 to C5) and 2026-10-21 (C2).** C1 is still a placeholder.
+`SOCKFUZZER_LEAK_REPORT=1` prints, per zone, the objects that outlive the iteration
+that allocated them, which is the measure for this section.
 
 | Item | Status |
 |---|---|
+| C2 NECP session/client cleanup | Done; there was no NECP leak. Closing the descriptor runs the real fo_close, which removes the session's policies and the client's flows and routes. The one way NECP state could outlive teardown was a descriptor parked in an SCM_RIGHTS cycle, which `clear_all()` now collects with `unp_gc()` |
 | C3 PF state cleanup | Done. `clear_all()` calls `pf_flush_all()`, which drops states and rules and stops PF. The previous call went through a socket ioctl on descriptor 0 and never reached PF |
 | C4 Routing table flush | Done for cloned routes. `clear_all()` calls `in_rtqdrain()` and `in6_rtqdrain()`, which delete every `RTPRF_OURS` route regardless of expiry; the rtqtimo timers never reached the one-hour expiry under the fake clock. Administratively added routes are not flushed |
 | C5 Interface address cleanup | Open. Addresses added via `SIOCAIFADDR_IN6_64` still persist across iterations. Recorded in `clear_all()` |
@@ -489,7 +491,7 @@ mbufs stop leaking.
 |---------|--------|
 | A. Bugs & Correctness | Complete |
 | B. Fuzzing Effectiveness | Complete except B6 (rejected) and B9 (partial) |
-| C. State Management & Isolation | C3 done, C4 partial, C5 open, C1 open (placeholder only); C2 not audited |
+| C. State Management & Isolation | C2 and C3 done, C4 done for cloned routes, C5 open, C1 open (placeholder only) |
 | D. CI & Infrastructure | D1 done (unit tests run in CI), D5 done (dependency caches); the rest not audited |
 | E. Documentation | Not audited |
 | F. Advanced Techniques | Not audited |
