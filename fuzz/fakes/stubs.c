@@ -899,7 +899,9 @@ void proc_platform() {}
 void proc_sdk() {}
 
 const char *sysctl_debug_get_preoslog(size_t *size) {
-  assert(false);
+  // Reachable through a sysctl in sys_generic.c. There is no pre-OS log in the
+  // harness; report an empty one instead of trapping.
+  if (size) *size = 0;
   return NULL;
 }
 
