@@ -31,9 +31,12 @@
 
 bool init_proc(void);
 bool configure_loopback_address(void);
+bool configure_loopback_address_in6(void);
 void drain_loopback_input(void);
 void drain_loopback_input_for_tcp_handshake(void);
 int connect_tcp4_for_handshake(int fd, const void* local_addr,
+                               const void* remote_addr, size_t remote_len);
+int connect_tcp6_for_handshake(int fd, const void* local_addr,
                                const void* remote_addr, size_t remote_len);
 size_t necp_aggregate_result_size(void);
 void clear_all();

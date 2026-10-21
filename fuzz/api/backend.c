@@ -117,6 +117,9 @@ int close_wrapper(int fd, int* retval);
 #include <netinet/ip.h>
 #include <netinet/tcp.h>
 #include <net/necp.h>
+#include <netinet6/in6_var.h>
+#include <netinet6/nd6.h>
+#include <netinet/ip6.h>
 
 void proto_input_run(void);
 extern bool get_fuzzed_bool(void);
@@ -129,8 +132,11 @@ struct fuzz_tcp4_lookup_context {
   } mode;
   bool valid;
   bool input_selected;
+  bool is_v6;
   struct in_addr src;
   struct in_addr dst;
+  struct in6_addr src6;
+  struct in6_addr dst6;
   uint16_t sport;
   uint16_t dport;
 };
@@ -143,16 +149,37 @@ bool fuzz_pcb_lookup_should_skip(struct inpcb* inp) {
     return get_fuzzed_bool();
   }
 
-  bool exact =
-      inp->inp_faddr.s_addr == tcp4_lookup_context.src.s_addr &&
-      inp->inp_laddr.s_addr == tcp4_lookup_context.dst.s_addr &&
-      inp->inp_fport == tcp4_lookup_context.sport &&
-      inp->inp_lport == tcp4_lookup_context.dport;
-  bool listener =
-      inp->inp_faddr.s_addr == INADDR_ANY && inp->inp_fport == 0 &&
-      inp->inp_lport == tcp4_lookup_context.dport &&
-      (inp->inp_laddr.s_addr == INADDR_ANY ||
-       inp->inp_laddr.s_addr == tcp4_lookup_context.dst.s_addr);
+  // The hook fires for both families (in6_pcb.c includes the same shadow
+  // header), so match on the pcb's own family, not the context's.
+  bool pcb_v6 = (inp->inp_vflag & INP_IPV6) != 0;
+  if (pcb_v6 != tcp4_lookup_context.is_v6) {
+    return true;  // wrong family for this handshake: skip it
+  }
+
+  bool exact, listener;
+  if (pcb_v6) {
+    exact =
+        IN6_ARE_ADDR_EQUAL(&inp->in6p_faddr, &tcp4_lookup_context.src6) &&
+        IN6_ARE_ADDR_EQUAL(&inp->in6p_laddr, &tcp4_lookup_context.dst6) &&
+        inp->inp_fport == tcp4_lookup_context.sport &&
+        inp->inp_lport == tcp4_lookup_context.dport;
+    listener =
+        IN6_IS_ADDR_UNSPECIFIED(&inp->in6p_faddr) && inp->inp_fport == 0 &&
+        inp->inp_lport == tcp4_lookup_context.dport &&
+        (IN6_IS_ADDR_UNSPECIFIED(&inp->in6p_laddr) ||
+         IN6_ARE_ADDR_EQUAL(&inp->in6p_laddr, &tcp4_lookup_context.dst6));
+  } else {
+    exact =
+        inp->inp_faddr.s_addr == tcp4_lookup_context.src.s_addr &&
+        inp->inp_laddr.s_addr == tcp4_lookup_context.dst.s_addr &&
+        inp->inp_fport == tcp4_lookup_context.sport &&
+        inp->inp_lport == tcp4_lookup_context.dport;
+    listener =
+        inp->inp_faddr.s_addr == INADDR_ANY && inp->inp_fport == 0 &&
+        inp->inp_lport == tcp4_lookup_context.dport &&
+        (inp->inp_laddr.s_addr == INADDR_ANY ||
+         inp->inp_laddr.s_addr == tcp4_lookup_context.dst.s_addr);
+  }
 
   if (tcp4_lookup_context.mode == FUZZ_TCP4_LOOKUP_CONNECT) {
     return !exact;
@@ -166,11 +193,33 @@ bool fuzz_pcb_lookup_should_skip(struct inpcb* inp) {
   // After tcp_input selects its socket, nested collision checks must only
   // find an existing connected PCB with the same tuple. In particular, the
   // new child and its listener are not collisions.
-  if (tcp4_lookup_context.input_selected && exact &&
-      inp->inp_faddr.s_addr != INADDR_ANY) {
+  bool connected = pcb_v6 ? !IN6_IS_ADDR_UNSPECIFIED(&inp->in6p_faddr)
+                          : inp->inp_faddr.s_addr != INADDR_ANY;
+  if (tcp4_lookup_context.input_selected && exact && connected) {
     return false;
   }
   return true;
+}
+
+// Only used on the handshake path, where the stack built the segment itself
+// over loopback, so TCP follows the fixed IPv6 header with no extensions.
+static void set_tcp6_lookup_context(struct mbuf* m) {
+  struct ip6_hdr ip6_header;
+  struct tcphdr tcp_header;
+  if (m_pktlen(m) < sizeof(ip6_header) + sizeof(tcp_header)) {
+    return;
+  }
+  m_copydata(m, 0, sizeof(ip6_header), &ip6_header);
+  if (ip6_header.ip6_nxt != IPPROTO_TCP) {
+    return;
+  }
+  m_copydata(m, sizeof(ip6_header), sizeof(tcp_header), &tcp_header);
+  tcp4_lookup_context.is_v6 = true;
+  tcp4_lookup_context.src6 = ip6_header.ip6_src;
+  tcp4_lookup_context.dst6 = ip6_header.ip6_dst;
+  tcp4_lookup_context.sport = tcp_header.th_sport;
+  tcp4_lookup_context.dport = tcp_header.th_dport;
+  tcp4_lookup_context.valid = true;
 }
 
 static void set_tcp4_lookup_context(struct mbuf* m) {
@@ -178,8 +227,18 @@ static void set_tcp4_lookup_context(struct mbuf* m) {
   struct tcphdr tcp_header;
   tcp4_lookup_context.valid = false;
   tcp4_lookup_context.input_selected = false;
+  tcp4_lookup_context.is_v6 = false;
 
-  if (m == NULL || m_pktlen(m) < sizeof(ip_header) + sizeof(tcp_header)) {
+  if (m == NULL || m_pktlen(m) < 1) {
+    return;
+  }
+  uint8_t version;
+  m_copydata(m, 0, 1, &version);
+  if ((version >> 4) == 6) {
+    set_tcp6_lookup_context(m);
+    return;
+  }
+  if (m_pktlen(m) < sizeof(ip_header) + sizeof(tcp_header)) {
     return;
   }
   m_copydata(m, 0, sizeof(ip_header), &ip_header);
@@ -207,10 +266,31 @@ __attribute__((visibility("default"))) int connect_tcp4_for_handshake(
   tcp4_lookup_context.mode = FUZZ_TCP4_LOOKUP_CONNECT;
   tcp4_lookup_context.valid = true;
   tcp4_lookup_context.input_selected = false;
+  tcp4_lookup_context.is_v6 = false;
   tcp4_lookup_context.src = remote->sin_addr;
   tcp4_lookup_context.dst = local->sin_addr;
   tcp4_lookup_context.sport = remote->sin_port;
   tcp4_lookup_context.dport = local->sin_port;
+  int error = connect_wrapper(fd, (char*)remote_addr, remote_len, NULL);
+  tcp4_lookup_context.mode = FUZZ_TCP4_LOOKUP_OFF;
+  tcp4_lookup_context.valid = false;
+  tcp4_lookup_context.input_selected = false;
+  return error;
+}
+
+__attribute__((visibility("default"))) int connect_tcp6_for_handshake(
+    int fd, const void* local_addr, const void* remote_addr,
+    size_t remote_len) {
+  const struct sockaddr_in6* local = local_addr;
+  const struct sockaddr_in6* remote = remote_addr;
+  tcp4_lookup_context.mode = FUZZ_TCP4_LOOKUP_CONNECT;
+  tcp4_lookup_context.valid = true;
+  tcp4_lookup_context.input_selected = false;
+  tcp4_lookup_context.is_v6 = true;
+  tcp4_lookup_context.src6 = remote->sin6_addr;
+  tcp4_lookup_context.dst6 = local->sin6_addr;
+  tcp4_lookup_context.sport = remote->sin6_port;
+  tcp4_lookup_context.dport = local->sin6_port;
   int error = connect_wrapper(fd, (char*)remote_addr, remote_len, NULL);
   tcp4_lookup_context.mode = FUZZ_TCP4_LOOKUP_OFF;
   tcp4_lookup_context.valid = false;
@@ -337,6 +417,43 @@ __attribute__((visibility("default"))) bool configure_loopback_address(void) {
   sin->sin_family = AF_INET;
   sin->sin_addr.s_addr = htonl(INADDR_LOOPBACK);
   int err = ioctl_wrapper(fd, SIOCSIFADDR, (char*)&ifr, NULL);
+
+  close_wrapper(fd, NULL);
+  return err == 0;
+}
+
+// Give lo0 the IPv6 loopback address ::1, so the stack has a route for
+// AF_INET6 the way configure_loopback_address does for AF_INET. loopattach()
+// does not plumb IPv6, so attach the protocol first (SIOCPROTOATTACH_IN6,
+// which calls in6_domifattach) and then add the address with SIOCAIFADDR_IN6.
+// Returns true if lo0 now owns ::1.
+__attribute__((visibility("default"))) bool configure_loopback_address_in6(void) {
+  int fd = -1;
+  if (socket_wrapper(AF_INET6, SOCK_DGRAM, 0, &fd) != 0 || fd < 0) {
+    return false;
+  }
+
+  struct in6_aliasreq ifra;
+  memset(&ifra, 0, sizeof(ifra));
+  strlcpy(ifra.ifra_name, "lo0", sizeof(ifra.ifra_name));
+
+  // Attach the IPv6 protocol to lo0. Harmless if it is already attached.
+  ioctl_wrapper(fd, SIOCPROTOATTACH_IN6, (char*)&ifra, NULL);
+
+  struct sockaddr_in6* sin6 = &ifra.ifra_addr;
+  sin6->sin6_len = sizeof(*sin6);
+  sin6->sin6_family = AF_INET6;
+  sin6->sin6_addr = in6addr_loopback;  // ::1
+
+  struct sockaddr_in6* mask = &ifra.ifra_prefixmask;
+  mask->sin6_len = sizeof(*mask);
+  mask->sin6_family = AF_INET6;
+  memset(&mask->sin6_addr, 0xff, sizeof(mask->sin6_addr));  // /128
+
+  ifra.ifra_lifetime.ia6t_vltime = ND6_INFINITE_LIFETIME;
+  ifra.ifra_lifetime.ia6t_pltime = ND6_INFINITE_LIFETIME;
+
+  int err = ioctl_wrapper(fd, SIOCAIFADDR_IN6, (char*)&ifra, NULL);
 
   close_wrapper(fd, NULL);
   return err == 0;

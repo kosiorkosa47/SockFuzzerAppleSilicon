@@ -1699,8 +1699,8 @@ static void HandleTcpSession(const TcpSession &ts, std::set<int> &open_fds) {
         connect_tcp4_for_handshake(client, client_addr.data(), bind_addr.data(),
                                    bind_addr.size());
       } else {
-        connect_wrapper(client, (caddr_t)bind_addr.data(), bind_addr.size(),
-                        nullptr);
+        connect_tcp6_for_handshake(client, client_addr.data(), bind_addr.data(),
+                                   bind_addr.size());
       }
       drain_loopback_input_for_tcp_handshake();
       // Deliver what the stack just queued on lo0, which is what lets the
@@ -1850,6 +1850,7 @@ DEFINE_BINARY_PROTO_FUZZER(const Session &session) {
     // is no route to 127.0.0.1 and no local connection can be established.
     // Interface addresses survive clear_all(), so once per process is enough.
     loopback_ready = configure_loopback_address();
+    configure_loopback_address_in6();
   }
 
   FuzzedDataProvider dp((const uint8_t *)session.data_provider().data(),

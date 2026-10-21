@@ -519,8 +519,10 @@ set(BSD_SOURCES
 # The upstream fuzzing patch deliberately puts every PCB in one hash bucket
 # and chooses candidates using fuzzed booleans. The deterministic loopback
 # handshake supplies a tuple-aware choice through this source-specific hook.
+# in6_pcb.c carries the same coin flips for IPv6, so it needs the hook too.
 set_source_files_properties(
   third_party/xnu/bsd/netinet/in_pcb.c
+  third_party/xnu/bsd/netinet6/in6_pcb.c
   PROPERTIES COMPILE_DEFINITIONS SOCKFUZZER_PCB_LOOKUP_HOOK=1
 )
 
